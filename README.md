@@ -90,6 +90,33 @@ response = client.beta.messages.create(
 
 ---
 
+## Instructions for usage
+
+1. Install the Claude app on your phone
+2. Use the Claude Voice Conversation once to allow permission to the microphone
+3. Open the Shortcuts app on iPhone (or similar on Android):
+  1. Create a Shortcut to the Claude Voice Conversation
+  2. Name this Shortcut “A Car Hit Me”
+  3. Make a duplicate and name it “I Was Hit By a Car”
+  4. Create an Automation inside the Shortcuts app
+    1. Select “Run Immediately”
+    2. Use the condition “When a NFC tag is detected”. (I named my tag “Collision”)
+    3. Make it Do one of the shortcuts defined above
+  5. Stick the NFC tag to your helmet or bike frame
+4. Launch the Voice Conversation mode of Claude:
+  1. Either touch the top back of your phone to the NFC tag
+  2. Or use Siri:
+    1. You can hold down the Siri button (power button) or say *“Hey Siri”*
+    2. Then say either shortcut name: “*A Car Hit Me”* or “*I Was Hit By a Car”*
+5. Once in the Claude Voice Conversation say something like:
+  1. *"I was just hit by a car while cycling, can you help me prepare a report?"*
+  2. *"A car hit me while I was walking; what do I do?"*
+  3. *"I was in a bike crash yesterday, what should I do now?"*
+  4. *"What do I do after being hit by a car?"*
+6. When you are done, ask for a draft of the report. If you have Gmail connected it will end up in your drafts folder.
+
+---
+
 ## Skill Output: Crash Summary Report
 
 After gathering information, Claude produces a structured report including:
