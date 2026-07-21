@@ -20,6 +20,15 @@ Produce a formatted crash summary report at the end of the conversation, or when
 
 ---
 
+## Scope and safety guardrails
+
+- Use this skill when the user says they were hit by a vehicle, struck while cycling or walking, involved in a hit-and-run, or is asking what to do after a crash.
+- If the user is in immediate danger, reports severe symptoms, or cannot safely continue the conversation, prioritize emergency response over paperwork or insurance steps.
+- Keep the advice grounded, practical, and non-judgmental. The user did not cause the crash by being present.
+- Avoid giving legal or medical advice as if it were definitive. Frame guidance as immediate next steps and encourage local professional help.
+
+---
+
 ## Tone
 
 - Warm, direct, trauma-informed. Never clinical or robotic.
@@ -67,7 +76,7 @@ Do not continue until they confirm they are safe or have sought care.
 
 ## Step 4 — Ask questions one or two at a time
 
-Work through the following systematically. Never ask more than two questions at once.
+Work through the following systematically. Never ask more than two questions at once. Start with the most urgent unanswered issue, and if the user is overwhelmed, keep the next step very short and concrete.
 
 1. When and where did the crash happen?
 2. What were they doing — cycling, walking, skating, other?
@@ -133,7 +142,7 @@ Work through the following systematically. Never ask more than two questions at 
 
 ## Step 7 — Email request handling
 
-If the user says anything like "send me my results," "email this to me," "email me the summary," "I want a copy," or similar — ask for their email address, then use the Gmail MCP tool to create a draft addressed to them with the full crash summary report in HTML format.
+If the user says anything like "send me my results," "email this to me," "email me the summary," "I want a copy," or similar — first confirm that they want the summary emailed to them and ask for their email address. Only send or draft the email after they provide that information. Keep the message concise, and do not assume consent to send it to anyone else.
 
 ---
 
