@@ -4,7 +4,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![The White Line](https://img.shields.io/badge/Source-The%20White%20Line-black)](https://www.thewhiteline.org/pages/tools)
 
-A trauma-informed, AI-powered guide for cyclists, pedestrians, and vulnerable road users after being hit by a car. Based on [*When a Car Hits You*](https://www.thewhiteline.org/pages/tools) by The White Line (Jill & Michael White).
+A trauma-informed, AI-powered guide for cyclists, pedestrians, and vulnerable road users after being hit by a car. 
 
 ---
 
@@ -44,50 +44,6 @@ Claude will load this skill automatically when context matches. Example phrases 
 
 > Requires code execution to be enabled on your plan.
 
-### Claude Code
-
-Copy the skill folder to your personal skills directory:
-
-```bash
-# Personal (available across all projects)
-cp -r skills/when-a-car-hits-you ~/.claude/skills/
-
-# Or project-scoped (shared via git)
-cp -r skills/when-a-car-hits-you .claude/skills/
-```
-
-Then restart Claude Code. Invoke with `/when-a-car-hits-you` or just describe the situation.
-
-### Claude API
-
-```python
-import anthropic
-import base64, zipfile, io
-
-client = anthropic.Anthropic()
-
-# Zip the skill folder
-buf = io.BytesIO()
-with zipfile.ZipFile(buf, 'w') as zf:
-    zf.write('skills/when-a-car-hits-you/SKILL.md',
-             'when-a-car-hits-you/SKILL.md')
-buf.seek(0)
-
-# Upload the skill
-skill = client.beta.skills.upload(
-    name="when-a-car-hits-you",
-    file=("when-a-car-hits-you.zip", buf, "application/zip")
-)
-
-# Use it in a message
-response = client.beta.messages.create(
-    model="claude-sonnet-4-6",
-    max_tokens=1024,
-    skill_ids=[skill.id],
-    messages=[{"role": "user", "content": "I was hit by a car while biking. What do I do?"}]
-)
-```
-
 ---
 
 ## Instructions for usage
@@ -98,13 +54,13 @@ response = client.beta.messages.create(
    1. Create a Shortcut to the Claude Voice Conversation.
    2. Name this Shortcut “A Car Hit Me”.
    3. Make a duplicate and name it “I Was Hit By a Car”.
-   4. Create an Automation inside the Shortcuts app:
+   4. (Optionally, use an NFC tag) Create an Automation inside the Shortcuts app:
       1. Select “Run Immediately”.
       2. Use the condition “When a NFC tag is detected”. (I named my tag “Collision”.)
       3. Make it do one of the shortcuts defined above.
-   5. Stick the NFC tag to your helmet or bike frame.
+      4. Stick the NFC tag to your helmet or bike frame.
 4. Launch the Voice Conversation mode of Claude:
-   1. Either touch the top back of your phone to the NFC tag.
+   1. Optionally, touch the top back of your phone to the NFC tag
    2. Or use Siri:
       1. You can hold down the Siri button (power button) or say *“Hey Siri”*.
       2. Then say either shortcut name: “*A Car Hit Me”* or “*I Was Hit By a Car”*.
@@ -136,8 +92,6 @@ After gathering information, Claude produces a structured report including:
 
 ## Key Guidance Encoded in This Skill
 
-All guidance is drawn directly from the [White Line source guide](https://www.thewhiteline.org/pages/tools):
-
 - **Never say "I'm fine"** — say *"I'm not sure yet. I need to be evaluated."*
 - **Always say "crash," never "accident"** — crashes have causes; accidents don't
 - **Call 911 after every crash** — even if it seems minor; no report = no record
@@ -153,12 +107,6 @@ All guidance is drawn directly from the [White Line source guide](https://www.th
 
 ## Source & Citation
 
-This skill is based on:
-
-> White, Jill and Michael. *When a Car Hits You: A guide for cyclists, pedestrians, and vulnerable road users after a "minor" crash.* The White Line, April 2026. https://www.thewhiteline.org/pages/tools
-
-The White Line was founded by Jill and Michael White after their son Magnus was killed by a driver while cycling in July 2023. This guide and this skill are dedicated to his memory.
-
 **This skill is not legal, medical, or financial advice.** Laws vary by state and jurisdiction. Always consult qualified professionals for guidance specific to your situation.
 
 ---
@@ -167,11 +115,6 @@ The White Line was founded by Jill and Michael White after their son Magnus was 
 
 | Resource | Link |
 |---|---|
-| The White Line (source guide) | https://www.thewhiteline.org/pages/tools |
-| Anthropic Agent Skills docs | https://docs.claude.com/en/agents-and-tools/agent-skills/overview |
-| Agent Skills open standard | https://agentskills.io |
-| Agent Skills marketplace | https://skillsmp.com |
-| Official Anthropic skills repo | https://github.com/anthropics/skills |
 | Crisis support (988 Lifeline) | https://988lifeline.org |
 | Crisis Text Line | Text HOME to 741741 |
 | CounterForce Health (insurance appeals) | https://counterforcehealth.com |
@@ -181,8 +124,6 @@ The White Line was founded by Jill and Michael White after their son Magnus was 
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
-Skill content is based on the White Line guide, shared here for public benefit with attribution. The White Line guide itself is © Jill & Michael White / The White Line.
 
 ---
 
