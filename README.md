@@ -4,6 +4,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Bike Law NC](https://img.shields.io/badge/Bike%20Law%20NC)](https://www.bikelaw.com/state/north-carolina-bicycle-accident-lawyers/)
 
+A trauma-informed, AI-powered guide for cyclists, pedestrians, and vulnerable road users after being hit by a car. 
+
+
 ---
 
 ## What It Does
@@ -52,11 +55,11 @@ Claude will load this skill automatically when context matches. Example phrases 
    1. Create a Shortcut to the Claude Voice Conversation.
    2. Name this Shortcut “A Car Hit Me”.
    3. Make a duplicate and name it “I Was Hit By a Car”.
-   4. Create an Automation inside the Shortcuts app:
+   4. (Optionally, use an NFC tag) Create an Automation inside the Shortcuts app:
       1. Select “Run Immediately”.
       2. Use the condition “When a NFC tag is detected”. (I named my tag “Collision”.)
       3. Make it do one of the shortcuts defined above.
-   5. Stick the NFC tag to your helmet or bike frame.
+      4. Stick the NFC tag to your helmet or bike frame.
 4. Launch the Voice Conversation mode of Claude:
    1. Either touch the top back of your phone to the NFC tag.
    2. Or use Siri:
