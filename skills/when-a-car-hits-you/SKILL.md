@@ -7,9 +7,6 @@ description: Guides cyclists, pedestrians, and vulnerable road users through wha
 
 A compassionate, trauma-informed guide for cyclists, pedestrians, and vulnerable road users after a crash with a motor vehicle.
 
-Based on *When a Car Hits You* by Jill & Michael White / The White Line.
-Source: https://www.thewhiteline.org/pages/tools
-
 ---
 
 ## Overview
@@ -253,7 +250,6 @@ for the next few weeks."
 ---
 
 ### Resources
-- The White Line (source guide): https://www.thewhiteline.org/pages/tools
 - Crisis support: 988 (call or text)
 - Crisis Text Line: text HOME to 741741
 - CounterForce Health (mental health insurance appeals): counterforcehealth.com
@@ -268,6 +264,7 @@ for the next few weeks."
 - MedPay typically covers $5,000–$10,000 in medical bills regardless of fault; applies to cyclists and pedestrians
 - UM/UIM coverage follows the person, not the vehicle — applies on a bike
 - ~1 in 7 US drivers is uninsured; ~1 in 3 has insufficient coverage
+- 75% of people with a suspended license drive anyway
 - Most minor crash claims resolve through insurance — no lawsuit required
 - Personal injury attorneys work on contingency: ~30–40% of recovery, nothing if you lose
 - Statute of limitations: typically 2–3 years; 90–180 days for government vehicles
@@ -276,4 +273,4 @@ for the next few weeks."
 - Do NOT accept settlement before Maximum Medical Improvement (MMI)
 - A normal CT scan does not rule out mild TBI — it only rules out bleeding and fracture
 - GPS/fitness tracker data (Strava, Garmin, Apple Watch) is admissible evidence and can prove fault
-- Comparative negligence in most states: you can recover damages as long as your fault does not exceed 50%
+- Contributory negligence in North Carolina: you cannot recover damages if you are at fault AT ALL
