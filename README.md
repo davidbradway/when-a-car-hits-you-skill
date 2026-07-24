@@ -2,7 +2,6 @@
 
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-Claude%20%2F%20Codex-6366f1)](https://agentskills.io)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Bike Law NC](https://img.shields.io/badge/Bike%20Law%20NC)](https://www.bikelaw.com/state/north-carolina-bicycle-accident-lawyers/)
 
 A trauma-informed, AI-powered guide for cyclists, pedestrians, and vulnerable road users after being hit by a car. 
 
