@@ -1,0 +1,277 @@
+"""Builds the crash summary report (email body) and the closing spoken
+guidance, mirroring Step 4 (phase guidance), Step 5b (NC/Durham), Step 5c
+(USAA), Step 5d (lawyer recommendation), and Step 7 (report format) of the
+`when-a-car-hits-you` skill.
+"""
+from datetime import datetime, timezone
+from typing import List
+
+from .config import CONTRIBUTORY_NEGLIGENCE_STATES
+from .state import CallSession
+
+PHASE_LABELS = {"at_scene": "At the scene", "recent": "Within the last 24 hours", "later": "Days/weeks later"}
+
+PHASE_GUIDANCE = {
+    "at_scene": [
+        "Call 911 and get a police report, no matter how minor this seems.",
+        "Leave the scene undisturbed if you safely can.",
+        "Don't say \"I'm fine\" — say \"I'm not sure yet, I need to be evaluated.\"",
+        "Photograph everything: injuries, your bike or gear, the vehicle, plate, and the scene.",
+        "Get witness names and phone numbers before they leave.",
+        "Never negotiate with the driver. Get their information and stop there.",
+        "When in doubt, go to the ER.",
+        "Save GPS or fitness tracker data and any nearby camera footage before it's lost.",
+    ],
+    "recent": [
+        "Get checked out at urgent care or the ER even if you feel fine — adrenaline masks injuries for 24 to 48 hours.",
+        "Tell every provider you were struck by a motor vehicle, and when and where.",
+        "Start a symptom and expense journal now.",
+        "Notify your own insurance company and ask specifically about MedPay coverage.",
+        "Make no statement to any insurance company until you've talked to a lawyer.",
+        "Do not sign anything or accept any settlement offer.",
+        "Stay off social media about this for the whole case.",
+    ],
+    "later": [
+        "Don't accept an early settlement before reaching Maximum Medical Improvement.",
+        "Personal injury attorneys work on contingency — a free consultation costs nothing.",
+        "Track every expense: medical, transport, lost wages, repairs, and daily-life impact.",
+        "Mental health treatment, including for PTSD, is legitimate and often reimbursable.",
+        "MedPay and uninsured motorist coverage on your own auto policy protect you as a cyclist or pedestrian too.",
+    ],
+}
+
+
+def _mode_word(session: CallSession) -> str:
+    return {"cycling": "cycling", "walking": "walking"}.get(session.answers.get("mode"), "cycling or walking")
+
+
+def _is_nc_or_contributory(session: CallSession) -> bool:
+    state_text = (session.answers.get("state_raw") or "").strip().lower()
+    return any(token in state_text for token in CONTRIBUTORY_NEGLIGENCE_STATES)
+
+
+def _is_nc(session: CallSession) -> bool:
+    state_text = (session.answers.get("state_raw") or "").strip().lower()
+    return "nc" == state_text or "north carolina" in state_text
+
+
+def _mentions_durham(session: CallSession) -> bool:
+    text = " ".join([
+        session.answers.get("datetime_location_raw") or "",
+        session.answers.get("state_raw") or "",
+    ]).lower()
+    return "durham" in text
+
+
+def _is_usaa(session: CallSession) -> bool:
+    return "usaa" in (session.answers.get("insurer_name_raw") or "").lower()
+
+
+def compute_urgent_flags(session: CallSession) -> List[str]:
+    a = session.answers
+    flags = []
+    if a.get("emergency_symptoms") == "yes":
+        flags.append("You reported serious symptoms — call 911 or get to an ER immediately if you have not already.")
+    if a.get("police_report") != "yes":
+        flags.append("Get a police report or officer documentation as soon as possible, even after the fact.")
+    if a.get("medical_care") in ("no_feels_fine", "declined"):
+        flags.append("Get evaluated by a doctor or urgent care within 24-48 hours — adrenaline can mask injuries.")
+    if a.get("insurer_contacted") == "yes":
+        flags.append("Do not give a recorded statement to the driver's insurance company until you've spoken with a lawyer.")
+    if a.get("settlement_offered") == "yes":
+        flags.append("Do not accept or sign any settlement offer before consulting an attorney.")
+    if a.get("own_insurer_notified") == "no":
+        flags.append("Notify your own auto insurer and ask specifically about MedPay and UM/UIM coverage.")
+    return flags
+
+
+def compute_completed_steps(session: CallSession) -> List[str]:
+    a = session.answers
+    done = []
+    if a.get("police_report") == "yes":
+        done.append("Called 911 / have a police report")
+    if a.get("photos") == "yes":
+        done.append("Took photos of the scene, vehicle, and injuries")
+    if a.get("witnesses") in ("yes", "none"):
+        done.append("Documented witnesses (or confirmed there were none)")
+    if a.get("medical_care") == "yes":
+        done.append("Sought medical care")
+    if a.get("own_insurer_notified") == "yes":
+        done.append("Notified own insurer")
+    if a.get("driver_info") == "yes":
+        done.append("Obtained driver's information")
+    return done
+
+
+def lawyer_recommended(session: CallSession) -> bool:
+    a = session.answers
+    return any([
+        a.get("medical_care") == "yes",
+        (a.get("injuries_raw") or "").strip().lower() not in ("", "none", "no", "nothing"),
+        a.get("insurer_contacted") == "yes",
+        a.get("settlement_offered") == "yes",
+        a.get("driver_behavior") in ("fled", "private"),
+        _is_nc_or_contributory(session),
+    ])
+
+
+def build_report_text(session: CallSession) -> str:
+    a = session.answers
+    phase = a.get("phase", "unknown")
+    urgent = compute_urgent_flags(session)
+    completed = compute_completed_steps(session)
+    mode = _mode_word(session)
+
+    lines = []
+    lines.append("CRASH SUMMARY REPORT")
+    lines.append("Generated by the automated crash line — informed by the when-a-car-hits-you skill")
+    lines.append("This is not legal, medical, or financial advice.")
+    lines.append("")
+    if a.get("emergency_symptoms") == "yes":
+        lines.append("*** CALLER REPORTED SEVERE SYMPTOMS DURING THE CALL — FOLLOW UP DIRECTLY ***")
+        lines.append("")
+    lines.append(f"Call SID: {session.call_sid}")
+    lines.append(f"Caller number: {session.from_number or 'unknown'}")
+    lines.append(f"Call started: {session.started_at}")
+    lines.append("")
+
+    lines.append("Crash Details")
+    lines.append(f"  Phase: {PHASE_LABELS.get(phase, phase)}")
+    lines.append(f"  When/where (as said): {a.get('datetime_location_raw', 'unknown')}")
+    lines.append(f"  Mode: {mode}")
+    lines.append(f"  State: {a.get('state_raw', 'unknown')}")
+    lines.append(f"  Insurance company: {a.get('insurer_name_raw', 'unknown')}")
+    lines.append("")
+
+    lines.append("At the Scene — Status")
+    lines.append(f"  Called 911 / police report: {a.get('police_report', 'unknown')}")
+    lines.append(f"  Driver info obtained: {a.get('driver_info', 'unknown')}")
+    lines.append(f"  Photos taken: {a.get('photos', 'unknown')}")
+    lines.append(f"  Witnesses documented: {a.get('witnesses', 'unknown')}")
+    lines.append(f"  Driver behavior: {a.get('driver_behavior', 'unknown')}")
+    lines.append(f"  Medical care sought: {a.get('medical_care', 'unknown')}")
+    lines.append(f"  Own insurer notified: {a.get('own_insurer_notified', 'unknown')}")
+    lines.append(f"  Driver's insurer contacted caller: {a.get('insurer_contacted', 'unknown')}")
+    lines.append(f"  Settlement offered: {a.get('settlement_offered', 'unknown')}")
+    lines.append("")
+
+    lines.append("Injuries & Symptoms Reported")
+    lines.append(f"  {a.get('injuries_raw', 'none reported')}")
+    lines.append("")
+
+    lines.append("URGENT — Do These Now" if urgent else "Urgent Flags: none")
+    for f in urgent:
+        lines.append(f"  - {f}")
+    lines.append("")
+
+    lines.append("Next Steps")
+    next_steps = (urgent or PHASE_GUIDANCE.get(phase, []))[:3]
+    for i, step in enumerate(next_steps, 1):
+        lines.append(f"  {i}. {step}")
+    lines.append("")
+
+    lines.append("Completed Steps")
+    for c in completed:
+        lines.append(f"  - {c}")
+    if not completed:
+        lines.append("  (none reported yet)")
+    lines.append("")
+
+    lines.append("Expenses to Track")
+    lines.append(f"  As reported: {a.get('expenses_raw', 'none reported')}")
+    lines.append("  Standard categories: medical bills, transportation, lost income, bike/gear repair, daily-life impact")
+    lines.append("")
+
+    lines.append(f"Phase Guidance ({PHASE_LABELS.get(phase, phase)})")
+    for g in PHASE_GUIDANCE.get(phase, []):
+        lines.append(f"  - {g}")
+    lines.append("")
+
+    if _is_nc_or_contributory(session):
+        lines.append("Legal note — contributory negligence state")
+        lines.append("  This state uses (or may use) pure contributory negligence: even 1% fault assigned to")
+        lines.append("  the caller can bar recovery entirely. Do not admit fault. Talk to a lawyer early.")
+        lines.append("")
+
+    if _is_nc(session):
+        lines.append("North Carolina specifics")
+        lines.append("  Statute of limitations: 3 years from the crash date (NC Gen. Stat. Section 1-52).")
+        lines.append("  Recommended attorney: Ann Groninger, Bike Law North Carolina, 704-200-2009,")
+        lines.append("  https://www.bikelaw.com/state/north-carolina-bicycle-accident-lawyers/")
+        if _mentions_durham(session):
+            lines.append("  Durham Police non-emergency: 919-560-4600")
+            lines.append("  Durham CrimeStoppers (hit-and-run tips): 919-683-1200")
+            lines.append("  Durham One Call (infrastructure issues): 919-560-1200 / durhamnc.gov")
+            lines.append("  Bike Durham (local advocacy): bikedurham.org")
+        lines.append("")
+
+    if _is_usaa(session):
+        lines.append("USAA specifics")
+        lines.append("  Claims (24/7): 1-800-531-8722 · Roadside: 1-800-531-8555")
+        lines.append("  File under the caller's own policy for MedPay / UM/UIM even as a cyclist or pedestrian.")
+        lines.append("  Do not give a recorded statement to USAA as the other driver's insurer without a lawyer.")
+        lines.append("")
+
+    if lawyer_recommended(session):
+        lines.append("Lawyer recommendation")
+        lines.append("  Based on the answers given, strongly consider a free consultation with a bike/pedestrian")
+        lines.append("  injury attorney. Contingency fee — no cost unless you recover.")
+        lines.append("  Bike Law network: https://www.bikelaw.com/bicycle-accident-lawyers/ · 1-844-531-7530")
+        lines.append("")
+
+    lines.append("Scripts — Exact Words to Use")
+    lines.append("  Calling 911:")
+    lines.append(f'    "I was struck by a motor vehicle while {mode}. I need an officer to respond and take a report."')
+    lines.append("  To the other driver's insurance company:")
+    lines.append('    "I\'m not prepared to discuss this today. Please send me your contact information in')
+    lines.append('    writing. I will respond once I\'ve spoken with an attorney."')
+    lines.append("  To your employer:")
+    lines.append('    "I was in a crash. I\'m seeking medical attention and I\'ll update you as soon as I can."')
+    lines.append("  Calling a bike/pedestrian crash attorney:")
+    lines.append(f'    "I was struck by a motor vehicle while {mode} on {a.get("datetime_location_raw", "[date/location]")}.')
+    lines.append('    I\'d like a consultation about whether I have a claim."')
+    lines.append("")
+    lines.append(f"Generated at: {datetime.now(timezone.utc).isoformat()}")
+
+    return "\n".join(lines)
+
+
+def build_subject(session: CallSession) -> str:
+    prefix = "URGENT crash report" if session.answers.get("emergency_symptoms") == "yes" else "Crash summary report"
+    when = session.answers.get("datetime_location_raw") or "unknown time/location"
+    return f"{prefix} — {when}"
+
+
+def build_closing_speech(session: CallSession) -> str:
+    a = session.answers
+    if a.get("emergency_symptoms") == "yes":
+        return (
+            "This needs immediate attention. Please hang up now and call 911, or get to an "
+            "emergency room right away. Do not drive yourself. I've sent what you told me to "
+            "David so he knows to follow up. You can call this line back later to finish your report."
+        )
+
+    phase = a.get("phase", "recent")
+    parts = ["Thank you. Here is what to keep in mind."]
+    for g in PHASE_GUIDANCE.get(phase, [])[:4]:
+        parts.append(g)
+
+    urgent = compute_urgent_flags(session)
+    if urgent:
+        parts.append("Before anything else: " + urgent[0])
+
+    if lawyer_recommended(session):
+        if _is_nc(session):
+            parts.append(
+                "Given what you've told me, you should strongly consider a free consultation with "
+                "Ann Groninger, Bike Law's North Carolina attorney, at 704-200-2009."
+            )
+        else:
+            parts.append(
+                "Given what you've told me, you should strongly consider a free consultation with a "
+                "bicycle or pedestrian injury attorney. It costs nothing to call."
+            )
+
+    parts.append("I've emailed your full crash summary report to David so he has a record of this call.")
+    parts.append("Take care of yourself. Goodbye.")
+    return " ".join(parts)
