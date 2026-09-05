@@ -3,7 +3,7 @@
 Each Step is one turn of the phone call: something is spoken, then either a
 DTMF digit or a short speech answer is collected. `next_id` inspects the
 answers gathered so far to decide where to go next, which is how phase
-detection, the emergency short-circuit, and the North Carolina / USAA
+detection, the emergency short-circuit, and the North Carolina / Durham
 branches from the source skill are reproduced over the phone.
 
 Terminal step id "REPORT" means: stop asking questions, speak the closing
@@ -12,6 +12,7 @@ guidance, email the report, hang up.
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional
 
+from .guidance import PHASE_GUIDANCE
 from .state import CallSession
 
 REPORT = "REPORT"
@@ -74,8 +75,29 @@ _register(Step(
     input_type="dtmf",
     field="emergency_symptoms",
     digit_map={"1": "yes", "2": "no"},
-    next_id=lambda s: REPORT if s.answers.get("emergency_symptoms") == "yes" else "datetime_location",
+    next_id=lambda s: REPORT if s.answers.get("emergency_symptoms") == "yes" else "phase_guidance",
     skip_default="no",
+))
+
+
+def _phase_guidance_prompt(session: CallSession) -> str:
+    phase = session.answers.get("phase", "recent")
+    parts = ["Here is what to keep in mind for your situation."]
+    parts.extend(PHASE_GUIDANCE.get(phase, []))
+    parts.append(
+        "Press 1 to hear this again. Press 2 to continue with the questions."
+    )
+    return " ".join(parts)
+
+
+_register(Step(
+    id="phase_guidance",
+    prompt=_phase_guidance_prompt,
+    input_type="dtmf",
+    field="phase_guidance_choice",
+    digit_map={"1": "repeat", "2": "continue"},
+    next_id=lambda s: "phase_guidance" if s.answers.get("phase_guidance_choice") == "repeat" else "datetime_location",
+    skip_default="continue",
 ))
 
 _register(Step(
@@ -229,16 +251,8 @@ _register(Step(
     input_type="dtmf",
     field="own_insurer_notified",
     digit_map={"1": "yes", "2": "no"},
-    next_id=lambda s: "insurance_provider",
+    next_id=lambda s: REPORT if s.answers.get("phase") == "at_scene" else "expenses",
     skip_default="no",
-))
-
-_register(Step(
-    id="insurance_provider",
-    prompt=lambda s: "Who is your auto insurance company?",
-    input_type="speech",
-    field="insurer_name_raw",
-    next_id=lambda s: "expenses",
 ))
 
 _register(Step(

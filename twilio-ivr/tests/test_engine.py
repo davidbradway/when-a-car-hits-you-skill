@@ -80,10 +80,52 @@ def test_invalid_dtmf_retries_then_falls_back_to_default(client):
     assert b"loss of consciousness" in resp.data
 
 
+def test_phase_guidance_reads_guidance_and_offers_repeat(client):
+    start_call(client)
+    answer(client, "phase", digits="2")
+    resp = answer(client, "emergency", digits="2")
+    assert b"Here is what to keep in mind" in resp.data
+    assert b"adrenaline masks injuries" in resp.data
+    assert b"Press 1 to hear this again" in resp.data
+
+
+def test_phase_guidance_repeat_loops_back_to_itself(client):
+    start_call(client)
+    answer(client, "phase", digits="2")
+    answer(client, "emergency", digits="2")
+    resp = answer(client, "phase_guidance", digits="1")
+    assert b"Here is what to keep in mind" in resp.data
+    assert b"Press 1 to hear this again" in resp.data
+
+
+def test_at_scene_skips_expenses_question(client, sent_emails):
+    start_call(client)
+    answer(client, "phase", digits="1")
+    answer(client, "emergency", digits="2")
+    answer(client, "phase_guidance", digits="2")
+    answer(client, "datetime_location", speech="just now on Main Street")
+    answer(client, "mode", digits="1")
+    answer(client, "state_location", speech="North Carolina")
+    answer(client, "police", digits="1")
+    answer(client, "driver_info", digits="1")
+    answer(client, "photos", digits="1")
+    answer(client, "witnesses", digits="3")
+    answer(client, "driver_behavior", digits="1")
+    answer(client, "medical_care", digits="1")
+    answer(client, "injuries", speech="sore knee")
+    answer(client, "insurer_contacted", digits="2")
+    answer(client, "settlement_offered", digits="2")
+    resp = answer(client, "own_insurer_notified", digits="2")
+
+    assert len(sent_emails) == 1
+    assert "I've emailed your full crash summary report" in resp.data.decode()
+
+
 def test_full_happy_path_sends_report(client, sent_emails):
     start_call(client)
     answer(client, "phase", digits="2")
     answer(client, "emergency", digits="2")
+    answer(client, "phase_guidance", digits="2")
     answer(client, "datetime_location", speech="yesterday afternoon on Main Street in Durham")
     answer(client, "mode", digits="1")
     answer(client, "state_location", speech="North Carolina")
@@ -97,7 +139,6 @@ def test_full_happy_path_sends_report(client, sent_emails):
     answer(client, "insurer_contacted", digits="2")
     answer(client, "settlement_offered", digits="2")
     answer(client, "own_insurer_notified", digits="2")
-    answer(client, "insurance_provider", speech="USAA")
     resp = answer(client, "expenses", speech="one hundred dollars for a doctor visit")
 
     assert len(sent_emails) == 1
@@ -106,5 +147,4 @@ def test_full_happy_path_sends_report(client, sent_emails):
     assert "North Carolina specifics" in body
     assert "Ann Groninger" in body
     assert "Durham Police non-emergency" in body
-    assert "USAA specifics" in body
     assert "I've emailed your full crash summary report" in resp.data.decode()

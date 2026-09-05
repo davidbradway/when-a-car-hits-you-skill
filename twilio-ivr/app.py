@@ -72,6 +72,11 @@ def finish_call(session: CallSession) -> VoiceResponse:
     return vr
 
 
+@app.route("/")
+def home():
+  return "Hello, World!"
+
+
 @app.post("/voice")
 @validate_twilio_request
 def voice():

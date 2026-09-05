@@ -1,44 +1,14 @@
 """Builds the crash summary report (email body) and the closing spoken
-guidance, mirroring Step 4 (phase guidance), Step 5b (NC/Durham), Step 5c
-(USAA), Step 5d (lawyer recommendation), and Step 7 (report format) of the
+guidance, mirroring Step 4 (phase guidance), Step 5b (NC/Durham), Step 5d
+(lawyer recommendation), and Step 7 (report format) of the
 `when-a-car-hits-you` skill.
 """
 from datetime import datetime, timezone
 from typing import List
 
 from .config import CONTRIBUTORY_NEGLIGENCE_STATES
+from .guidance import PHASE_GUIDANCE, PHASE_LABELS
 from .state import CallSession
-
-PHASE_LABELS = {"at_scene": "At the scene", "recent": "Within the last 24 hours", "later": "Days/weeks later"}
-
-PHASE_GUIDANCE = {
-    "at_scene": [
-        "Call 911 and get a police report, no matter how minor this seems.",
-        "Leave the scene undisturbed if you safely can.",
-        "Don't say \"I'm fine\" — say \"I'm not sure yet, I need to be evaluated.\"",
-        "Photograph everything: injuries, your bike or gear, the vehicle, plate, and the scene.",
-        "Get witness names and phone numbers before they leave.",
-        "Never negotiate with the driver. Get their information and stop there.",
-        "When in doubt, go to the ER.",
-        "Save GPS or fitness tracker data and any nearby camera footage before it's lost.",
-    ],
-    "recent": [
-        "Get checked out at urgent care or the ER even if you feel fine — adrenaline masks injuries for 24 to 48 hours.",
-        "Tell every provider you were struck by a motor vehicle, and when and where.",
-        "Start a symptom and expense journal now.",
-        "Notify your own insurance company and ask specifically about MedPay coverage.",
-        "Make no statement to any insurance company until you've talked to a lawyer.",
-        "Do not sign anything or accept any settlement offer.",
-        "Stay off social media about this for the whole case.",
-    ],
-    "later": [
-        "Don't accept an early settlement before reaching Maximum Medical Improvement.",
-        "Personal injury attorneys work on contingency — a free consultation costs nothing.",
-        "Track every expense: medical, transport, lost wages, repairs, and daily-life impact.",
-        "Mental health treatment, including for PTSD, is legitimate and often reimbursable.",
-        "MedPay and uninsured motorist coverage on your own auto policy protect you as a cyclist or pedestrian too.",
-    ],
-}
 
 
 def _mode_word(session: CallSession) -> str:
@@ -61,10 +31,6 @@ def _mentions_durham(session: CallSession) -> bool:
         session.answers.get("state_raw") or "",
     ]).lower()
     return "durham" in text
-
-
-def _is_usaa(session: CallSession) -> bool:
-    return "usaa" in (session.answers.get("insurer_name_raw") or "").lower()
 
 
 def compute_urgent_flags(session: CallSession) -> List[str]:
@@ -140,7 +106,6 @@ def build_report_text(session: CallSession) -> str:
     lines.append(f"  When/where (as said): {a.get('datetime_location_raw', 'unknown')}")
     lines.append(f"  Mode: {mode}")
     lines.append(f"  State: {a.get('state_raw', 'unknown')}")
-    lines.append(f"  Insurance company: {a.get('insurer_name_raw', 'unknown')}")
     lines.append("")
 
     lines.append("At the Scene — Status")
@@ -205,13 +170,6 @@ def build_report_text(session: CallSession) -> str:
             lines.append("  Bike Durham (local advocacy): bikedurham.org")
         lines.append("")
 
-    if _is_usaa(session):
-        lines.append("USAA specifics")
-        lines.append("  Claims (24/7): 1-800-531-8722 · Roadside: 1-800-531-8555")
-        lines.append("  File under the caller's own policy for MedPay / UM/UIM even as a cyclist or pedestrian.")
-        lines.append("  Do not give a recorded statement to USAA as the other driver's insurer without a lawyer.")
-        lines.append("")
-
     if lawyer_recommended(session):
         lines.append("Lawyer recommendation")
         lines.append("  Based on the answers given, strongly consider a free consultation with a bike/pedestrian")
@@ -251,10 +209,7 @@ def build_closing_speech(session: CallSession) -> str:
             "David so he knows to follow up. You can call this line back later to finish your report."
         )
 
-    phase = a.get("phase", "recent")
-    parts = ["Thank you. Here is what to keep in mind."]
-    for g in PHASE_GUIDANCE.get(phase, [])[:4]:
-        parts.append(g)
+    parts = ["Thank you."]
 
     urgent = compute_urgent_flags(session)
     if urgent:

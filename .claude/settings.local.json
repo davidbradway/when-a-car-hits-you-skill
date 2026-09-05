@@ -6,7 +6,11 @@
       "Bash(git commit:*)",
       "Bash(git branch:*)",
       "Bash(git remote:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(python -m pytest tests/test_engine.py -q)",
+      "Bash(conda env *)",
+      "PowerShell(Get-Command conda -ErrorAction SilentlyContinue; Get-Command python -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; where.exe python 2>$null; if \\(Test-Path \"$env:USERPROFILE\\\\miniconda3\"\\) { \"found miniconda3\" }; if \\(Test-Path \"$env:USERPROFILE\\\\Anaconda3\"\\) { \"found anaconda3\" })",
+      "PowerShell(& \"$env:USERPROFILE\\\\Anaconda3\\\\python.exe\" --version; & \"$env:USERPROFILE\\\\Anaconda3\\\\Scripts\\\\conda.exe\" env list)"
     ]
   }
 }

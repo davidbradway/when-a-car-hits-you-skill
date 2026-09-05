@@ -2,9 +2,9 @@
 
 A phone-based version of the [`when-a-car-hits-you`](../skills/when-a-car-hits-you/SKILL.md)
 Claude skill. Call a Twilio number, get walked through the same decision
-tree by voice — phase detection, an emergency check, the core intake
-questions, phase-specific guidance, North Carolina/Durham and USAA add-ons,
-and a lawyer recommendation when warranted — and a crash summary report is
+tree by voice — phase detection, an emergency check, phase-specific
+guidance, the core intake questions, North Carolina/Durham add-ons, and a
+lawyer recommendation when warranted — and a crash summary report is
 emailed at the end of the call, whether the caller finishes or hangs up
 partway through.
 
@@ -16,18 +16,19 @@ partway through.
    the caller to hang up and call 911, emails an urgent report to the
    configured recipient, and ends the call — none of the remaining
    questions are asked.
-3. **Intake questions** (mix of DTMF menus and speech-to-text) — when/where,
+3. **Phase guidance**, spoken aloud right after the emergency check: the
+   phase-appropriate next steps from the skill's Step 4, with the option to
+   hear them again or continue on to the intake questions.
+4. **Intake questions** (mix of DTMF menus and speech-to-text) — when/where,
    mode of travel, state, police report, driver info, photos, witnesses,
    driver behavior, medical care, injuries (free speech), whether the
    driver's insurer has been in touch, any settlement offer, whether the
-   caller's own insurer has been notified, insurance company name, and
-   expenses (free speech).
-4. **Closing guidance**, spoken aloud: phase-appropriate next steps, the
-   single most urgent flag if any, and — automatically, based on the
-   answers — added guidance for North Carolina/Durham and for USAA, and a
-   lawyer recommendation when the situation warrants one (this mirrors the
-   skill's Step 5b/5c/5d branches).
-5. **Report emailed** to `REPORT_TO_EMAIL`, formatted like the skill's
+   caller's own insurer has been notified, and expenses (free speech).
+5. **Closing guidance**, spoken aloud: the single most urgent flag if any,
+   and — automatically, based on the answers — added guidance for North
+   Carolina/Durham, and a lawyer recommendation when the situation warrants
+   one (this mirrors the skill's Step 5b/5d branches).
+6. **Report emailed** to `REPORT_TO_EMAIL`, formatted like the skill's
    crash summary report: crash details, scene checklist, injuries, urgent
    flags, next steps, completed steps, expenses, and word-for-word scripts.
 
@@ -43,6 +44,7 @@ twilio-ivr/
     config.py       Env-var configuration
     state.py        In-memory per-call session store (keyed by CallSid)
     steps.py        The decision tree: prompts, DTMF maps, transitions
+    guidance.py     Phase labels and phase-specific guidance text
     report.py       Report text, closing speech, urgent-flag/lawyer logic
     mailer.py       SMTP email sending
   tests/
