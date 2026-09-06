@@ -1,0 +1,157 @@
+# Build and publish the Twilio IVR container image.
+#
+# This workflow holds NO cloud credentials and needs none. It runs the tests,
+# builds the image, and publishes it to GHCR — that is all. The server pulls
+# the new image on a timer; nothing here pushes into it.
+#
+# The consequence is that a contributor can ship a change with nothing more
+# than push access to this repository: no SSH key, no AWS access, no secrets
+# beyond the GITHUB_TOKEN that Actions issues automatically.
+#
+# The final job then proves the deploy landed by polling the running service
+# until it reports the commit that was just built — a stronger signal than
+# "the build succeeded".
+
+name: twilio-ivr
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'twilio-ivr/**'
+      - '.github/workflows/twilio-ivr.yml'
+  pull_request:
+    paths:
+      - 'twilio-ivr/**'
+      - '.github/workflows/twilio-ivr.yml'
+  workflow_dispatch:
+
+# Read-only by default. Only the build job widens this, and only to publish.
+permissions:
+  contents: read
+
+# Never let two deploys overlap. Deliberately not cancel-in-progress: an
+# interrupted image push is worse than a slightly stale queue.
+concurrency:
+  group: twilio-ivr-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # GHCR requires an all-lowercase image path. Both the repository owner and
+  # name are already lowercase here; a fork under a mixed-case account would
+  # need to lowercase this.
+  IMAGE: ghcr.io/${{ github.repository }}/twilio-ivr
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: twilio-ivr
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          # Matches the Dockerfile base image, so the tests run against the
+          # same interpreter that will serve calls.
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: twilio-ivr/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        env:
+          # The suite exercises the routes directly, with no Twilio signature
+          # to present. Production leaves this at its default of true.
+          VALIDATE_TWILIO_SIGNATURE: 'false'
+        run: pytest tests/ -q
+
+  build:
+    name: build and publish
+    needs: test
+    # Never publish from a pull request. This repository is public, so anyone
+    # can open a PR from a fork; building on PRs is fine, but pushing an image
+    # into this namespace from unreviewed code is not.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compute short SHA
+        id: vars
+        # Sliced from GITHUB_SHA rather than `git rev-parse --short`, which can
+        # return more than 7 characters when a prefix is ambiguous. The verify
+        # job compares against this exact string, so it must be deterministic.
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: twilio-ivr
+          push: true
+          # The server is a Lightsail nano_3_0, which is x86. Pinned explicitly
+          # so a future runner change cannot silently produce an image the box
+          # refuses to start with an exec-format error.
+          platforms: linux/amd64
+          build-args: |
+            GIT_SHA=${{ steps.vars.outputs.short_sha }}
+          # :latest is what the server pulls. The immutable sha- tag is what
+          # makes rollback possible — pin the compose file to a previous one.
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # buildx otherwise attaches a provenance attestation, which makes
+          # GHCR list phantom "unknown/unknown" architecture entries alongside
+          # the real image. Unhelpful for a single-arch image pulled by a plain
+          # docker compose.
+          provenance: false
+
+  verify:
+    name: verify deploy
+    needs: build
+    # Skipped entirely when the repository variable is unset, so the workflow
+    # is still useful to anyone who just wants the image built. Set
+    # DEPLOY_HEALTHCHECK_URL (a repository *variable*, not a secret — it is
+    # only a public URL) to enable it.
+    if: vars.DEPLOY_HEALTHCHECK_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the running service to report the new commit
+        env:
+          URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+          WANT: ${{ needs.build.outputs.short_sha }}
+        run: |
+          echo "Waiting for $URL to report commit $WANT"
+          # The server checks for a new image every 60s, so this normally
+          # settles in a minute or two. Five minutes is the ceiling before we
+          # call it a failed deploy.
+          got=""
+          for attempt in $(seq 1 20); do
+            got="$(curl -fsS --max-time 10 "$URL" | jq -r '.commit // empty' || true)"
+            if [ "$got" = "$WANT" ]; then
+              echo "Deployed: service is running $got"
+              exit 0
+            fi
+            echo "  attempt $attempt/20: running=${got:-unreachable}"
+            sleep 15
+          done
+          echo "::error::$URL never reported $WANT (last saw: ${got:-unreachable})"
+          exit 1
