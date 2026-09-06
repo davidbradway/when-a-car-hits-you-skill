@@ -7,10 +7,13 @@ os.environ.setdefault("SMTP_PASSWORD", "")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import logging
+
 import pytest
+from twilio.request_validator import RequestValidator
 
 import app as flask_app_module
-from ivr import mailer, state
+from ivr import config, mailer, state
 
 
 @pytest.fixture
@@ -148,3 +151,99 @@ def test_full_happy_path_sends_report(client, sent_emails):
     assert "Ann Groninger" in body
     assert "Durham Police non-emergency" in body
     assert "I've emailed your full crash summary report" in resp.data.decode()
+
+
+# ---------------------------------------------------------------------------
+# Deployment behaviour: reverse proxy, signature handling, health, retention
+# ---------------------------------------------------------------------------
+
+PUBLIC_URL = "https://crashline.example.com/voice"
+
+
+def test_signature_validates_against_public_url_behind_proxy(client, monkeypatch):
+    """Twilio signs the PUBLIC https URL, but behind a TLS-terminating proxy
+    Flask sees http://localhost/voice. Without ProxyFix the two never match and
+    every webhook 403s — the app looks completely dead with no obvious cause.
+    """
+    token = "test_auth_token"
+    monkeypatch.setattr(config, "VALIDATE_TWILIO_SIGNATURE", True)
+    monkeypatch.setattr(config, "TWILIO_AUTH_TOKEN", token)
+
+    params = {"CallSid": "CA_proxy", "From": "+15550000000"}
+    signature = RequestValidator(token).compute_signature(PUBLIC_URL, params)
+
+    resp = client.post(
+        "/voice",
+        data=params,
+        headers={
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "crashline.example.com",
+            "X-Twilio-Signature": signature,
+        },
+    )
+    assert resp.status_code == 200
+
+
+def test_signature_rejected_when_url_does_not_match(client, monkeypatch):
+    """The same signature without the proxy headers must fail — proving the
+    check is genuinely bound to the URL and the test above is not a no-op.
+    """
+    token = "test_auth_token"
+    monkeypatch.setattr(config, "VALIDATE_TWILIO_SIGNATURE", True)
+    monkeypatch.setattr(config, "TWILIO_AUTH_TOKEN", token)
+
+    params = {"CallSid": "CA_proxy", "From": "+15550000000"}
+    signature = RequestValidator(token).compute_signature(PUBLIC_URL, params)
+
+    resp = client.post("/voice", data=params, headers={"X-Twilio-Signature": signature})
+    assert resp.status_code == 403
+
+
+def test_validation_fails_closed_when_token_is_missing(client, monkeypatch):
+    """An empty token used to silently disable validation entirely, so one typo
+    in .env would leave these endpoints open to anyone who can send a POST.
+    """
+    monkeypatch.setattr(config, "VALIDATE_TWILIO_SIGNATURE", True)
+    monkeypatch.setattr(config, "TWILIO_AUTH_TOKEN", "")
+
+    resp = client.post("/voice", data={"CallSid": "CA_x", "From": "+15550000000"})
+    assert resp.status_code == 500
+
+
+def test_healthz_is_unauthenticated_and_reports_the_running_commit(client, monkeypatch):
+    monkeypatch.setattr(config, "GIT_SHA", "deadbeef")
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"status": "ok", "commit": "deadbeef"}
+
+
+def test_abandoned_sessions_are_swept(client):
+    """Sessions are dropped on report or on the /status webhook. When neither
+    happens the entry would otherwise live forever in a long-running process.
+    """
+    start_call(client, call_sid="CA_old")
+    assert "CA_old" in state._sessions
+
+    state._sessions["CA_old"].started_monotonic -= state.SESSION_TTL_SECONDS + 1
+    start_call(client, call_sid="CA_new")
+
+    assert "CA_old" not in state._sessions
+    assert "CA_new" in state._sessions
+
+
+def test_report_body_is_not_logged_unless_explicitly_enabled(monkeypatch, caplog):
+    """The report contains the caller's number, crash location and injuries."""
+    monkeypatch.setattr(config, "SMTP_USER", "")
+    monkeypatch.setattr(config, "SMTP_PASSWORD", "")
+    body = "Injuries: suspected broken collarbone"
+
+    monkeypatch.setattr(config, "LOG_REPORT_BODY", False)
+    with caplog.at_level(logging.WARNING):
+        mailer.send_email("subject", body)
+    assert "broken collarbone" not in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(config, "LOG_REPORT_BODY", True)
+    with caplog.at_level(logging.WARNING):
+        mailer.send_email("subject", body)
+    assert "broken collarbone" in caplog.text
