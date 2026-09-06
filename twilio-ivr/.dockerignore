@@ -1,0 +1,23 @@
+# Secrets never enter the image. They are supplied at runtime by docker compose
+# via env_file, from a root-owned .env on the host.
+.env
+.env.*
+
+# Local dev artifacts
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Not needed at runtime. Tests run in CI against the source tree, before the
+# image is built — they are not shipped inside it.
+tests/
+.git/
+.gitignore
+README.md
+Dockerfile
+.dockerignore
