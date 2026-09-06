@@ -10,6 +10,7 @@ from functools import wraps
 from flask import Flask, request, abort
 from twilio.request_validator import RequestValidator
 from twilio.twiml.voice_response import VoiceResponse, Gather
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ivr import config, mailer, report
 from ivr.state import CallSession, drop, get, get_or_create
@@ -20,12 +21,37 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# In production this app runs behind a TLS-terminating reverse proxy, so Flask
+# sees "http://127.0.0.1:8000/voice" while Twilio computed its signature over
+# "https://<public-host>/voice". Since validation below hashes request.url,
+# without this every single webhook would fail and return 403.
+#
+# Exactly ONE proxy hop is trusted. Increasing these counts would let a caller
+# forge X-Forwarded-* headers and therefore choose the URL that signatures are
+# verified against. When run directly (no proxy) the headers are absent and
+# this is a no-op.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 
 def validate_twilio_request(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not config.VALIDATE_TWILIO_SIGNATURE or not config.TWILIO_AUTH_TOKEN:
+        # The explicit opt-out stays, for local testing and the test suite.
+        if not config.VALIDATE_TWILIO_SIGNATURE:
             return f(*args, **kwargs)
+
+        # Fail CLOSED when validation is enabled but no token is configured.
+        # Previously an empty token silently skipped validation, so a single
+        # typo in .env would leave these endpoints accepting unsigned requests
+        # from anyone on the internet — while the config still claimed
+        # validation was on.
+        if not config.TWILIO_AUTH_TOKEN:
+            logger.error(
+                "VALIDATE_TWILIO_SIGNATURE is enabled but TWILIO_AUTH_TOKEN is empty. "
+                "Refusing the request rather than serving it unverified."
+            )
+            abort(500)
+
         validator = RequestValidator(config.TWILIO_AUTH_TOKEN)
         signature = request.headers.get("X-Twilio-Signature", "")
         if not validator.validate(request.url, request.form, signature):
@@ -75,6 +101,21 @@ def finish_call(session: CallSession) -> VoiceResponse:
 @app.route("/")
 def home():
   return "Hello, World!"
+
+
+@app.get("/healthz")
+def healthz():
+    """Liveness and version probe.
+
+    Deliberately unauthenticated: the container HEALTHCHECK and the deploy
+    workflow both need to reach it without Twilio credentials. It exposes only
+    the commit that is running — which is already public in the repo — and no
+    call data or configuration.
+
+    GIT_SHA is baked in at image build time, which is what lets a deploy prove
+    the new code actually went live rather than assuming a push succeeded.
+    """
+    return {"status": "ok", "commit": config.GIT_SHA}, 200
 
 
 @app.post("/voice")
