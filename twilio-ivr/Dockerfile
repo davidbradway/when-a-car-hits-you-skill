@@ -20,13 +20,21 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd --system --create-home --uid 10001 appuser
+# Not --system: that flag expects to allocate from the system range (below
+# SYS_UID_MAX, normally 999), so combining it with an explicit high UID makes
+# useradd warn on every build.
+RUN useradd --create-home --uid 10001 appuser
 COPY --chown=appuser:appuser . .
 USER appuser
 
 EXPOSE 8000
 
 # Uses the stdlib rather than curl so the image carries no extra packages.
+#
+# NOTE: HEALTHCHECK is a Docker image-config field with no equivalent in the
+# OCI image spec. Docker/buildx keeps it; Podman defaults to OCI format and
+# silently DROPS it, so a local build needs:
+#     podman build --format docker ...
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"
 
