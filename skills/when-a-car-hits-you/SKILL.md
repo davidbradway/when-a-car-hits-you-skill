@@ -125,37 +125,7 @@ Other NC options if they want to compare (also free consultations, contingency f
 
 ---
 
-### Step 5c — Insurance provider check: USAA
-
-If the user has **USAA auto insurance** (or mentions USAA), add the following USAA-specific guidance. USAA is generally responsive and well-rated, but their goal is still to minimize payouts. Adjust tone accordingly — acknowledge they have a reputation for good service while still emphasizing protections.
-
-**Contacting USAA:**
-- **Claims phone (24/7):** 1-800-531-8722 (also written as 1-800-531-USAA)
-- **USAA Mobile App** (iOS/Android): Best for filing, uploading photos, and tracking claim status — this is the fastest path
-- **USAA.com:** Log in → Insurance → Claims → Report a Claim
-- **Roadside assistance (if needed):** 1-800-531-8555 (24/7)
-- USAA recommends reporting within 72 hours; earlier is better
-
-**How to file as a cyclist/pedestrian:**
-- Even as a cyclist or pedestrian (not in a vehicle), your USAA **MedPay** and **UM/UIM (Uninsured/Underinsured Motorist)** coverage follows *you*, not the car. File under your own USAA auto policy.
-- When calling or using the app, tell them: "I was struck by a motor vehicle while [cycling/walking]. I am filing for MedPay and/or UM/UIM coverage under my own policy."
-- USAA will likely assign a **medical pay adjuster** separately from any property damage adjuster — follow up with both.
-- If the driver is also USAA-insured: same claims number, but provide the other driver's policy number. USAA will keep your claim separate from theirs.
-
-**Using the USAA app (highly recommended):**
-- Upload photos of injuries, your bike/gear, the scene, and any damage directly through the app
-- Track claim status, upload documents, and message your adjuster in-app
-- Can arrange a rental or transportation through the app if needed
-
-**Key cautions specific to USAA:**
-- Even though USAA has a reputation for excellent customer service, their adjusters' job is still to minimize payouts. Their friendliness is not a reason to skip legal advice.
-- Do not give a recorded statement to USAA *as the other driver's insurer* without consulting an attorney. As *your own* insurer, your policy's cooperation clause requires you to cooperate with them — but even then, keep answers accurate and concise.
-- Do not accept any settlement offer before reaching Maximum Medical Improvement (MMI) and consulting an attorney, even if it seems generous.
-- USAA's **SafePilot** program is unrelated to claims — don't confuse driving-behavior tracking with claims handling.
-
----
-
-### Step 5d — Recommend calling a lawyer
+### Step 5c — Recommend calling a lawyer
 
 Raise this proactively rather than waiting to be asked. Most people underestimate how early the decision matters — the window to preserve evidence, avoid a damaging recorded statement, and stay off a settlement offer closes fast.
 
@@ -312,9 +282,3 @@ Never deliver this as a lecture, and never as a response to a crash the user jus
 - Bike Walk NC (statewide advocacy): bikewalknc.org
 - **Ann Groninger — Bike Law North Carolina** (recommended NC cyclist attorney): 704-200-2009 · https://www.bikelaw.com/state/north-carolina-bicycle-accident-lawyers/ · Durham office 300 Blackwell St., Suite 101
 - Duke University Hospital (trauma): Main St., Durham
-
-### USAA insurance
-- USAA Claims (24/7): 1-800-531-8722
-- USAA Roadside Assistance: 1-800-531-8555
-- USAA Mobile App (iOS/Android): preferred for filing, photos, and tracking
-- USAA Claims online: usaa.com → Insurance → Claims

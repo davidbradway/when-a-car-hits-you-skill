@@ -27,7 +27,7 @@ partway through.
 5. **Closing guidance**, spoken aloud: the single most urgent flag if any,
    and — automatically, based on the answers — added guidance for North
    Carolina/Durham, and a lawyer recommendation when the situation warrants
-   one (this mirrors the skill's Step 5b/5d branches).
+   one (this mirrors the skill's Step 5b/5c branches).
 6. **Report emailed** to `REPORT_TO_EMAIL`, formatted like the skill's
    crash summary report: crash details, scene checklist, injuries, urgent
    flags, next steps, completed steps, expenses, and word-for-word scripts.

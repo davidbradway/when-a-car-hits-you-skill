@@ -1,5 +1,5 @@
 """Builds the crash summary report (email body) and the closing spoken
-guidance, mirroring Step 4 (phase guidance), Step 5b (NC/Durham), Step 5d
+guidance, mirroring Step 4 (phase guidance), Step 5b (NC/Durham), Step 5c
 (lawyer recommendation), and Step 7 (report format) of the
 `when-a-car-hits-you` skill.
 """
