@@ -48,7 +48,9 @@ def validate_twilio_request(f):
         if not config.TWILIO_AUTH_TOKEN:
             logger.error(
                 "VALIDATE_TWILIO_SIGNATURE is enabled but TWILIO_AUTH_TOKEN is empty. "
-                "Refusing the request rather than serving it unverified."
+                "Refusing the request rather than serving it unverified. "
+                "For local testing without a Twilio account, set "
+                "VALIDATE_TWILIO_SIGNATURE=false."
             )
             abort(500)
 
