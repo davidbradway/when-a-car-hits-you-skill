@@ -61,12 +61,51 @@ cp .env.example .env   # then fill in SMTP_USER / SMTP_PASSWORD etc.
 python app.py          # runs on http://localhost:5000
 ```
 
+`.env.example` sets `VALIDATE_TWILIO_SIGNATURE=false`. Without a Twilio account
+there is no signature to check, and with validation on and no token every
+request is refused with a 500. Production leaves the setting out entirely,
+where the code default of `true` applies.
+
+Leaving `SMTP_USER`/`SMTP_PASSWORD` blank is fine: the report is logged instead
+of emailed. Set `LOG_REPORT_BODY=true` to see the whole report in the log.
+
 Run the tests:
 
 ```bash
 pip install pytest
 VALIDATE_TWILIO_SIGNATURE=false pytest tests/ -v
 ```
+
+### Driving the IVR without Twilio
+
+The webhooks are ordinary form POSTs, so `curl` can walk the tree. Keep the
+same `CallSid` across requests — it is the session key. DTMF steps take
+`Digits`, speech steps take `SpeechResult`; each response's `action="..."`
+tells you the next step to post to.
+
+```bash
+curl -X POST localhost:5000/voice -d 'CallSid=dev1&From=%2B15551234567'
+curl -X POST localhost:5000/gather/phase          -d 'CallSid=dev1&Digits=2'
+curl -X POST localhost:5000/gather/emergency      -d 'CallSid=dev1&Digits=2'
+curl -X POST localhost:5000/gather/phase_guidance -d 'CallSid=dev1&Digits=2'
+curl -X POST localhost:5000/gather/datetime_location \
+     -d 'CallSid=dev1&SpeechResult=yesterday on Main Street'
+```
+
+`GET /healthz` returns `{"status": "ok", "commit": "..."}` and needs no session.
+
+### Running the container locally
+
+To reproduce exactly what the server runs, including the single-worker gunicorn
+setup:
+
+```bash
+docker build -t crashline --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+docker run --rm -p 8000:8000 --env-file .env crashline
+```
+
+Podman works too, but needs `--format docker` on the build or the healthcheck
+is silently dropped.
 
 ### Email delivery
 
