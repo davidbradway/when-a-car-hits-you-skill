@@ -97,20 +97,40 @@ Point your Twilio number's **Voice → A call comes in** webhook at
 
 ### Production deployment
 
-Run with gunicorn behind HTTPS (Twilio requires HTTPS in production):
+Twilio requires HTTPS in production, so run behind a TLS-terminating
+reverse proxy. The supplied `Dockerfile` is the reference deployment:
 
 ```bash
-gunicorn -w 4 -b 0.0.0.0:8000 app:app
+docker build -t crashline --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+docker run -d -p 127.0.0.1:8000:8000 --env-file .env crashline
 ```
 
-Set `TWILIO_AUTH_TOKEN` (from the Twilio Console) so incoming webhook
-requests are verified — `VALIDATE_TWILIO_SIGNATURE` defaults to `true`.
+**Use exactly one gunicorn worker.** Call state lives in an in-memory dict
+keyed by `CallSid` (`ivr/state.py`), so a second worker would receive a
+caller's later webhooks in a process that has never seen their session and
+restart the decision tree mid-call. Concurrency comes from threads, which
+are safe because the store is lock-guarded:
 
-Note on scaling: call state lives in an in-memory dict inside the process,
-keyed by `CallSid`. That's fine for a single gunicorn worker; running
-multiple workers/instances would need a shared store (e.g. Redis) instead
-of `ivr/state.py`'s dict, since a given call's webhooks must all land on
-the worker holding its session.
+```bash
+gunicorn --workers 1 --threads 4 -b 0.0.0.0:8000 app:app
+```
+
+Running multiple workers or instances would first need a shared session
+store (e.g. Redis) in place of `ivr/state.py`.
+
+Set `TWILIO_AUTH_TOKEN` (from the Twilio Console) so incoming webhook
+requests are verified — `VALIDATE_TWILIO_SIGNATURE` defaults to `true`, and
+the app now refuses requests if validation is on but the token is missing,
+rather than silently serving them unverified.
+
+**Behind a proxy, the app relies on `ProxyFix`** (already wired up in
+`app.py`) plus the proxy forwarding `X-Forwarded-Proto` and
+`X-Forwarded-Host`. Twilio signs the public HTTPS URL; without those the
+app sees `http://127.0.0.1:8000/...`, every signature check fails, and all
+webhooks return 403.
+
+`GET /healthz` returns `{"status": "ok", "commit": "<GIT_SHA>"}` for
+health checks and for confirming which build is live.
 
 ## Extending the tree
 
