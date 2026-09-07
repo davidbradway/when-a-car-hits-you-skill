@@ -1,14 +1,8 @@
-# Secrets never enter the image. They come from a .env file on the host at
-# runtime, via `docker run --env-file` or compose's env_file.
-#
-# This is load-bearing, not tidiness: without it a developer's local .env —
-# real SMTP password, real Twilio token — would be baked into a published
-# image. Verify with:
-#   docker run --rm <image> sh -c 'ls -a /app/.env'
+# Keeps a developer's local .env out of a published image.
+# Verify: docker run --rm <image> ls -a /app/.env
 .env
 .env.*
 
-# Local dev artifacts
 venv/
 .venv/
 __pycache__/
@@ -18,8 +12,7 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Not needed at runtime. Tests run in CI against the source tree, before the
-# image is built — they are not shipped inside it.
+# Tests run in CI against the source tree, not from inside the image.
 tests/
 .git/
 .gitignore

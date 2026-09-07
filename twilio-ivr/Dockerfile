@@ -1,18 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# Pinned to a specific Python AND Debian release: a bare :slim tag would move
-# both underneath us silently. Let Dependabot bump this deliberately. Keep it
-# current — 3.14 is the current Python and trixie the current Debian stable —
-# since a pin is only useful while somebody is still maintaining it.
-#
-# Note this pins the BASE only. requirements.txt uses version ranges, so two
-# builds a month apart can still ship different Flask/Twilio versions. Pinning
-# exact versions (or a hash-locked file) would close that gap.
+# Pinned deliberately; bump via Dependabot. Only the base is pinned —
+# requirements.txt uses version ranges.
 FROM python:3.14-slim-trixie
 
-# Baked in by CI so /healthz can report exactly which commit is running. That is
-# what lets a deploy prove the new code actually went live, rather than trusting
-# that a push succeeded.
+# Reported by /healthz so a deploy can confirm which commit is live.
 ARG GIT_SHA=unknown
 ENV GIT_SHA=${GIT_SHA} \
     PYTHONUNBUFFERED=1 \
@@ -22,38 +14,24 @@ ENV GIT_SHA=${GIT_SHA} \
 
 WORKDIR /app
 
-# Dependencies in their own layer so editing app code does not reinstall them.
+# Separate layer so editing app code does not reinstall dependencies.
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Not --system: that flag expects to allocate from the system range (below
-# SYS_UID_MAX, normally 999), so combining it with an explicit high UID makes
-# useradd warn on every build.
 RUN useradd --create-home --uid 10001 appuser
 COPY --chown=appuser:appuser . .
 USER appuser
 
 EXPOSE 8000
 
-# Uses the stdlib rather than curl so the image carries no extra packages.
-#
-# NOTE: HEALTHCHECK is a Docker image-config field with no equivalent in the
-# OCI image spec. Docker/buildx keeps it; Podman defaults to OCI format and
-# silently DROPS it, so a local build needs:
-#     podman build --format docker ...
+# Podman defaults to OCI format, which has no HEALTHCHECK field and drops this
+# silently. A local build needs `--format docker`.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"
 
-# EXACTLY ONE WORKER — this is load-bearing, not a default.
-#
-# Call state lives in an in-process dict keyed by CallSid (ivr/state.py). With a
-# second worker, a caller's webhooks would land on whichever process the load
-# balancer picked, and a process that has never seen that CallSid restarts the
-# decision tree from the beginning — mid-call, for someone who was just hit by
-# a car. Concurrency comes from --threads instead, which is safe because the
-# session store is guarded by a threading.Lock.
-#
-# If you ever change this line, change the matching guidance in README.md too.
+# ONE worker, deliberately: call state is an in-process dict keyed by CallSid
+# (ivr/state.py), so a second worker restarts a caller's decision tree mid-call.
+# Threads are safe — the store is lock-guarded. Keep README.md in sync.
 CMD ["gunicorn", \
      "--workers", "1", \
      "--threads", "4", \
