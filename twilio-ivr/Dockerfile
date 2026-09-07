@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# Pinned to a specific Debian base so rebuilds are reproducible. Floating on
-# :slim would silently change the OS underneath us; let Dependabot bump this.
-FROM python:3.12-slim-bookworm
+# Pinned to a specific Python AND Debian release so rebuilds are reproducible.
+# A bare :slim tag would move both underneath us silently; let Dependabot bump
+# this deliberately. Keep it current: 3.14 is the current Python and trixie the
+# current Debian stable. Whoever touches this next should check both, since a
+# pin is only a good idea while somebody is still maintaining it.
+FROM python:3.14-slim-trixie
 
 # Baked in by CI so /healthz can report exactly which commit is running. That is
 # what lets a deploy prove the new code actually went live, rather than trusting
