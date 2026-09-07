@@ -124,34 +124,51 @@ jobs:
           # docker compose.
           provenance: false
 
-  verify:
-    name: verify deploy
+  deploy:
+    name: deploy
     needs: build
-    # Skipped entirely when the repository variable is unset, so the workflow
-    # is still useful to anyone who just wants the image built. Set
-    # DEPLOY_HEALTHCHECK_URL (a repository *variable*, not a secret — it is
-    # only a public URL) to enable it.
-    if: vars.DEPLOY_HEALTHCHECK_URL != ''
+    # Skipped entirely when DEPLOY_HOST is unset, so the workflow still just
+    # builds an image for anyone who has no server to push to.
+    if: vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for the running service to report the new commit
+      - name: Deploy over SSH
         env:
-          URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Pinned host key rather than StrictHostKeyChecking=no, so this is
+          # not trusting-on-first-use against a public hostname every run.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # No command is sent: the key's authorized_keys entry carries a
+          # forced command, so the server runs its own deploy script and
+          # streams the output back here. Anything this client asked for would
+          # be discarded, which is the point.
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes ubuntu@"$HOST"
+
+      - name: Assert the new commit is actually serving
+        env:
+          URL: https://${{ vars.DEPLOY_HOST }}/healthz
           WANT: ${{ needs.build.outputs.short_sha }}
         run: |
-          echo "Waiting for $URL to report commit $WANT"
-          # The server checks for a new image every 60s, so this normally
-          # settles in a minute or two. Five minutes is the ceiling before we
-          # call it a failed deploy.
+          # The deploy above already succeeded or failed loudly. This confirms
+          # the container that came up is really running the new code, rather
+          # than a stale one that restarted cleanly.
           got=""
-          for attempt in $(seq 1 20); do
+          for attempt in $(seq 1 12); do
             got="$(curl -fsS --max-time 10 "$URL" | jq -r '.commit // empty' || true)"
             if [ "$got" = "$WANT" ]; then
-              echo "Deployed: service is running $got"
+              echo "Live: serving $got"
               exit 0
             fi
-            echo "  attempt $attempt/20: running=${got:-unreachable}"
-            sleep 15
+            echo "  attempt $attempt/12: serving=${got:-unreachable}"
+            sleep 5
           done
           echo "::error::$URL never reported $WANT (last saw: ${got:-unreachable})"
           exit 1
