@@ -1,5 +1,10 @@
-# Secrets never enter the image. They are supplied at runtime by docker compose
-# via env_file, from a root-owned .env on the host.
+# Secrets never enter the image. They come from a .env file on the host at
+# runtime, via `docker run --env-file` or compose's env_file.
+#
+# This is load-bearing, not tidiness: without it a developer's local .env —
+# real SMTP password, real Twilio token — would be baked into a published
+# image. Verify with:
+#   docker run --rm <image> sh -c 'ls -a /app/.env'
 .env
 .env.*
 

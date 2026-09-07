@@ -1,10 +1,13 @@
 # syntax=docker/dockerfile:1
 
-# Pinned to a specific Python AND Debian release so rebuilds are reproducible.
-# A bare :slim tag would move both underneath us silently; let Dependabot bump
-# this deliberately. Keep it current: 3.14 is the current Python and trixie the
-# current Debian stable. Whoever touches this next should check both, since a
-# pin is only a good idea while somebody is still maintaining it.
+# Pinned to a specific Python AND Debian release: a bare :slim tag would move
+# both underneath us silently. Let Dependabot bump this deliberately. Keep it
+# current — 3.14 is the current Python and trixie the current Debian stable —
+# since a pin is only useful while somebody is still maintaining it.
+#
+# Note this pins the BASE only. requirements.txt uses version ranges, so two
+# builds a month apart can still ship different Flask/Twilio versions. Pinning
+# exact versions (or a hash-locked file) would close that gap.
 FROM python:3.14-slim-trixie
 
 # Baked in by CI so /healthz can report exactly which commit is running. That is
@@ -50,8 +53,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # a car. Concurrency comes from --threads instead, which is safe because the
 # session store is guarded by a threading.Lock.
 #
-# NOTE: twilio-ivr/README.md suggests `gunicorn -w 4` for production. That is
-# wrong for this app, and the README says so itself two paragraphs later.
+# If you ever change this line, change the matching guidance in README.md too.
 CMD ["gunicorn", \
      "--workers", "1", \
      "--threads", "4", \
