@@ -61,12 +61,51 @@ cp .env.example .env   # then fill in SMTP_USER / SMTP_PASSWORD etc.
 python app.py          # runs on http://localhost:5000
 ```
 
+`.env.example` sets `VALIDATE_TWILIO_SIGNATURE=false`. Without a Twilio account
+there is no signature to check, and with validation on and no token every
+request is refused with a 500. Production leaves the setting out entirely,
+where the code default of `true` applies.
+
+Leaving `SMTP_USER`/`SMTP_PASSWORD` blank is fine: the report is logged instead
+of emailed. Set `LOG_REPORT_BODY=true` to see the whole report in the log.
+
 Run the tests:
 
 ```bash
 pip install pytest
 VALIDATE_TWILIO_SIGNATURE=false pytest tests/ -v
 ```
+
+### Driving the IVR without Twilio
+
+The webhooks are ordinary form POSTs, so `curl` can walk the tree. Keep the
+same `CallSid` across requests — it is the session key. DTMF steps take
+`Digits`, speech steps take `SpeechResult`; each response's `action="..."`
+tells you the next step to post to.
+
+```bash
+curl -X POST localhost:5000/voice -d 'CallSid=dev1&From=%2B15551234567'
+curl -X POST localhost:5000/gather/phase          -d 'CallSid=dev1&Digits=2'
+curl -X POST localhost:5000/gather/emergency      -d 'CallSid=dev1&Digits=2'
+curl -X POST localhost:5000/gather/phase_guidance -d 'CallSid=dev1&Digits=2'
+curl -X POST localhost:5000/gather/datetime_location \
+     -d 'CallSid=dev1&SpeechResult=yesterday on Main Street'
+```
+
+`GET /healthz` returns `{"status": "ok", "commit": "..."}` and needs no session.
+
+### Running the container locally
+
+To reproduce exactly what the server runs, including the single-worker gunicorn
+setup:
+
+```bash
+docker build -t crashline --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+docker run --rm -p 8000:8000 --env-file .env crashline
+```
+
+Podman works too, but needs `--format docker` on the build or the healthcheck
+is silently dropped.
 
 ### Email delivery
 
@@ -97,20 +136,40 @@ Point your Twilio number's **Voice → A call comes in** webhook at
 
 ### Production deployment
 
-Run with gunicorn behind HTTPS (Twilio requires HTTPS in production):
+Twilio requires HTTPS in production, so run behind a TLS-terminating
+reverse proxy. The supplied `Dockerfile` is the reference deployment:
 
 ```bash
-gunicorn -w 4 -b 0.0.0.0:8000 app:app
+docker build -t crashline --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+docker run -d -p 127.0.0.1:8000:8000 --env-file .env crashline
 ```
 
-Set `TWILIO_AUTH_TOKEN` (from the Twilio Console) so incoming webhook
-requests are verified — `VALIDATE_TWILIO_SIGNATURE` defaults to `true`.
+**Use exactly one gunicorn worker.** Call state lives in an in-memory dict
+keyed by `CallSid` (`ivr/state.py`), so a second worker would receive a
+caller's later webhooks in a process that has never seen their session and
+restart the decision tree mid-call. Concurrency comes from threads, which
+are safe because the store is lock-guarded:
 
-Note on scaling: call state lives in an in-memory dict inside the process,
-keyed by `CallSid`. That's fine for a single gunicorn worker; running
-multiple workers/instances would need a shared store (e.g. Redis) instead
-of `ivr/state.py`'s dict, since a given call's webhooks must all land on
-the worker holding its session.
+```bash
+gunicorn --workers 1 --threads 4 -b 0.0.0.0:8000 app:app
+```
+
+Running multiple workers or instances would first need a shared session
+store (e.g. Redis) in place of `ivr/state.py`.
+
+Set `TWILIO_AUTH_TOKEN` (from the Twilio Console) so incoming webhook
+requests are verified — `VALIDATE_TWILIO_SIGNATURE` defaults to `true`, and
+the app now refuses requests if validation is on but the token is missing,
+rather than silently serving them unverified.
+
+**Behind a proxy, the app relies on `ProxyFix`** (already wired up in
+`app.py`) plus the proxy forwarding `X-Forwarded-Proto` and
+`X-Forwarded-Host`. Twilio signs the public HTTPS URL; without those the
+app sees `http://127.0.0.1:8000/...`, every signature check fails, and all
+webhooks return 403.
+
+`GET /healthz` returns `{"status": "ok", "commit": "<GIT_SHA>"}` for
+health checks and for confirming which build is live.
 
 ## Extending the tree
 
