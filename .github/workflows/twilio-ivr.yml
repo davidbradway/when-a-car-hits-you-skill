@@ -1,0 +1,154 @@
+# Test, publish the image to GHCR, then deploy over SSH.
+#
+# No cloud credentials: the deploy key can only run one script on the server
+# (a forced command in its authorized_keys entry), so shipping a change needs
+# nothing but push access to this repo.
+
+name: twilio-ivr
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'twilio-ivr/**'
+      - '.github/workflows/twilio-ivr.yml'
+  pull_request:
+    paths:
+      - 'twilio-ivr/**'
+      - '.github/workflows/twilio-ivr.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Not cancel-in-progress: an interrupted image push is worse than a queue.
+concurrency:
+  group: twilio-ivr-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # GHCR requires an all-lowercase path.
+  IMAGE: ghcr.io/${{ github.repository }}/twilio-ivr
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: twilio-ivr
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14' # keep in sync with the Dockerfile base
+          cache: pip
+          cache-dependency-path: twilio-ivr/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        env:
+          VALIDATE_TWILIO_SIGNATURE: 'false'
+        run: pytest tests/ -q
+
+  build:
+    name: build and publish
+    needs: test
+    timeout-minutes: 20
+    # This repo is public: anyone can open a fork PR, and that must not be able
+    # to push an image into this namespace.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compute short SHA
+        id: vars
+        # Sliced, not `git rev-parse --short`, which can return more than 7
+        # characters and would then never match the assert step below.
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: twilio-ivr
+          push: true
+          # The server is x86; an arm64 image fails to start with an
+          # exec-format error that looks nothing like its cause.
+          platforms: linux/amd64
+          build-args: |
+            GIT_SHA=${{ steps.vars.outputs.short_sha }}
+          # The server pulls :latest; the sha- tag makes rollback possible.
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Otherwise buildx adds attestations that surface as phantom
+          # "unknown/unknown" architecture rows in GHCR.
+          provenance: false
+
+  deploy:
+    name: deploy
+    needs: build
+    # Skipped when DEPLOY_HOST is unset, so the workflow still just builds.
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Pinned rather than StrictHostKeyChecking=no.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # No command sent: the key's forced command runs the server's own
+          # deploy script and streams its output back here.
+          # BatchMode: fail immediately on a host-key mismatch instead of
+          # prompting and hanging until the job times out.
+          ssh -i ~/.ssh/id_deploy \
+              -o IdentitiesOnly=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              ubuntu@"$HOST"
+
+      - name: Assert the new commit is actually serving
+        env:
+          URL: https://${{ vars.DEPLOY_HOST }}/healthz
+          WANT: ${{ needs.build.outputs.short_sha }}
+        run: |
+          got=""
+          for attempt in $(seq 1 12); do
+            got="$(curl -fsS --max-time 10 "$URL" | jq -r '.commit // empty' || true)"
+            if [ "$got" = "$WANT" ]; then
+              echo "Live: serving $got"
+              exit 0
+            fi
+            echo "  attempt $attempt/12: serving=${got:-unreachable}"
+            sleep 5
+          done
+          echo "::error::$URL never reported $WANT (last saw: ${got:-unreachable})"
+          exit 1
