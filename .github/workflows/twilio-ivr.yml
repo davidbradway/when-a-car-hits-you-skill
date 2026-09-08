@@ -117,6 +117,18 @@ jobs:
           HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          # Application config, sent to the server as a .env. Separate settings
+          # rather than one blob so any single value can be rotated on its own.
+          #
+          # Secret, and the app has no default — required for it to work:
+          TWILIO_AUTH_TOKEN: ${{ secrets.APP_TWILIO_AUTH_TOKEN }}
+          SMTP_USER: ${{ secrets.APP_SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.APP_SMTP_PASSWORD }}
+          # Not secret, and the app already defaults these. Set only to override:
+          SMTP_HOST: ${{ vars.APP_SMTP_HOST }}
+          SMTP_PORT: ${{ vars.APP_SMTP_PORT }}
+          REPORT_TO_EMAIL: ${{ vars.APP_REPORT_TO_EMAIL }}
+          REPORT_FROM_EMAIL: ${{ vars.APP_REPORT_FROM_EMAIL }}
         run: |
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
@@ -125,15 +137,32 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+          # Unset values are OMITTED, not written empty. The app reads config
+          # with os.environ.get(NAME, default), so "SMTP_HOST=" would override
+          # the default with an empty string instead of falling back to it.
+          envfile="$(mktemp)"
+          add() { [ -n "$2" ] && printf '%s=%s\n' "$1" "$2" >> "$envfile"; return 0; }
+          add TWILIO_AUTH_TOKEN "$TWILIO_AUTH_TOKEN"
+          add SMTP_USER         "$SMTP_USER"
+          add SMTP_PASSWORD     "$SMTP_PASSWORD"
+          add SMTP_HOST         "$SMTP_HOST"
+          add SMTP_PORT         "$SMTP_PORT"
+          add REPORT_TO_EMAIL   "$REPORT_TO_EMAIL"
+          add REPORT_FROM_EMAIL "$REPORT_FROM_EMAIL"
+          echo "sending $(wc -l < "$envfile") settings"
+
           # No command sent: the key's forced command runs the server's own
-          # deploy script and streams its output back here.
+          # deploy script, which writes this .env (mode 600, values never
+          # echoed) and then redeploys. Send nothing and it leaves the existing
+          # .env alone, so a deploy without secrets configured is harmless.
           # BatchMode: fail immediately on a host-key mismatch instead of
           # prompting and hanging until the job times out.
           ssh -i ~/.ssh/id_deploy \
               -o IdentitiesOnly=yes \
               -o BatchMode=yes \
               -o ConnectTimeout=15 \
-              ubuntu@"$HOST"
+              ubuntu@"$HOST" < "$envfile"
+          rm -f "$envfile"
 
       - name: Assert the new commit is actually serving
         env:
