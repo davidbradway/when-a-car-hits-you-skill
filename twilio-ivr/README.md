@@ -1,52 +1,37 @@
 # Crash Line — Twilio IVR
 
-A phone-based version of the [`when-a-car-hits-you`](../skills/when-a-car-hits-you/SKILL.md)
-Claude skill. Call a Twilio number, get walked through the same decision
-tree by voice — phase detection, an emergency check, phase-specific
-guidance, the core intake questions, North Carolina/Durham add-ons, and a
-lawyer recommendation when warranted — and a crash summary report is
-emailed at the end of the call, whether the caller finishes or hangs up
-partway through.
+A phone-based crash line, based on Ann Groninger's guidance for what to do
+after being hit by a car while biking, walking, or running. Call a Twilio
+number, answer one question, and hear the matching advice — with a live
+transfer offered to North Carolina callers.
 
 ## How a call flows
 
-1. **Phase check** (DTMF) — at the scene, within 24 hours, or later.
-2. **Emergency check** (DTMF) — loss of consciousness, confusion, vomiting,
-   severe headache, chest pain, dizziness. A "yes" here immediately tells
-   the caller to hang up and call 911, emails an urgent report to the
-   configured recipient, and ends the call — none of the remaining
-   questions are asked.
-3. **Phase guidance**, spoken aloud right after the emergency check: the
-   phase-appropriate next steps from the skill's Step 4, with the option to
-   hear them again or continue on to the intake questions.
-4. **Intake questions** (mix of DTMF menus and speech-to-text) — when/where,
-   mode of travel, state, police report, driver info, photos, witnesses,
-   driver behavior, medical care, injuries (free speech), whether the
-   driver's insurer has been in touch, any settlement offer, whether the
-   caller's own insurer has been notified, and expenses (free speech).
-5. **Closing guidance**, spoken aloud: the single most urgent flag if any,
-   and — automatically, based on the answers — added guidance for North
-   Carolina/Durham, and a lawyer recommendation when the situation warrants
-   one (this mirrors the skill's Step 5b/5c branches).
-6. **Report emailed** to `REPORT_TO_EMAIL`, formatted like the skill's
-   crash summary report: crash details, scene checklist, injuries, urgent
-   flags, next steps, completed steps, expenses, and word-for-word scripts.
+1. **North Carolina check** (DTMF) — "Press 1 if the crash happened in
+   North Carolina. Press 2 if it happened somewhere else."
+2. **Advice**, spoken aloud:
+   - North Carolina callers hear the North Carolina–specific guidance
+     (pure contributory negligence, and the insurance/med-pay rules that
+     follow from it) plus the general guidance.
+   - Everyone else hears the general guidance only.
+3. **Transfer offer** (North Carolina callers only) — "Press 1 to be
+   connected now to the Law Office of Johnson & Groninger, PLLC. Otherwise,
+   stay on the line and this call will end." Pressing 1 dials
+   (919) 899-4078 live; anything else ends the call.
 
-If the caller hangs up before finishing, `/status` (Twilio's call-status
-webhook) emails whatever was collected so far, marked "[Abandoned call]".
+Nothing about the call is recorded, reported, or emailed — it's advice
+read aloud and, optionally, a transfer.
 
 ## Project layout
 
 ```
 twilio-ivr/
-  app.py            Flask routes: /voice, /gather/<step_id>, /status
+  app.py            Flask routes: /voice, /gather/nc_check, /gather/transfer
   ivr/
     config.py       Env-var configuration
     state.py        In-memory per-call session store (keyed by CallSid)
-    steps.py        The decision tree: prompts, DTMF maps, transitions
-    guidance.py     Phase labels and phase-specific guidance text
-    report.py       Report text, closing speech, urgent-flag/lawyer logic
-    mailer.py       SMTP email sending
+    steps.py        The two DTMF questions: prompts and digit maps
+    advice.py        Spoken guidance text (North Carolina and general)
   tests/
     test_engine.py  End-to-end tests against the Flask app (no real Twilio)
 ```
@@ -57,7 +42,7 @@ twilio-ivr/
 cd twilio-ivr
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # then fill in SMTP_USER / SMTP_PASSWORD etc.
+cp .env.example .env
 python app.py          # runs on http://localhost:5000
 ```
 
@@ -65,9 +50,6 @@ python app.py          # runs on http://localhost:5000
 there is no signature to check, and with validation on and no token every
 request is refused with a 500. Production leaves the setting out entirely,
 where the code default of `true` applies.
-
-Leaving `SMTP_USER`/`SMTP_PASSWORD` blank is fine: the report is logged instead
-of emailed. Set `LOG_REPORT_BODY=true` to see the whole report in the log.
 
 Run the tests:
 
@@ -79,17 +61,12 @@ VALIDATE_TWILIO_SIGNATURE=false pytest tests/ -v
 ### Driving the IVR without Twilio
 
 The webhooks are ordinary form POSTs, so `curl` can walk the tree. Keep the
-same `CallSid` across requests — it is the session key. DTMF steps take
-`Digits`, speech steps take `SpeechResult`; each response's `action="..."`
-tells you the next step to post to.
+same `CallSid` across requests — it is the session key.
 
 ```bash
 curl -X POST localhost:5000/voice -d 'CallSid=dev1&From=%2B15551234567'
-curl -X POST localhost:5000/gather/phase          -d 'CallSid=dev1&Digits=2'
-curl -X POST localhost:5000/gather/emergency      -d 'CallSid=dev1&Digits=2'
-curl -X POST localhost:5000/gather/phase_guidance -d 'CallSid=dev1&Digits=2'
-curl -X POST localhost:5000/gather/datetime_location \
-     -d 'CallSid=dev1&SpeechResult=yesterday on Main Street'
+curl -X POST localhost:5000/gather/nc_check -d 'CallSid=dev1&Digits=1'
+curl -X POST localhost:5000/gather/transfer -d 'CallSid=dev1&Digits=2'
 ```
 
 `GET /healthz` returns `{"status": "ok", "commit": "..."}` and needs no session.
@@ -107,22 +84,6 @@ docker run --rm -p 8000:8000 --env-file .env crashline
 Podman works too, but needs `--format docker` on the build or the healthcheck
 is silently dropped.
 
-### Email delivery
-
-The report is sent over SMTP. For Gmail: enable 2-Step Verification on
-`david.bradway@gmail.com`, create an **App Password**, and set:
-
-```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=david.bradway@gmail.com
-SMTP_PASSWORD=<the 16-character app password>
-REPORT_TO_EMAIL=david.bradway@gmail.com
-```
-
-If `SMTP_USER`/`SMTP_PASSWORD` are left blank, the app logs the report
-instead of emailing it — useful for local testing without credentials.
-
 ### Exposing it to Twilio locally
 
 ```bash
@@ -130,9 +91,7 @@ ngrok http 5000
 ```
 
 Point your Twilio number's **Voice → A call comes in** webhook at
-`https://<ngrok-id>.ngrok.io/voice` (HTTP POST), and its
-**Call status changes** webhook at `https://<ngrok-id>.ngrok.io/status`
-(HTTP POST) so abandoned calls still get reported.
+`https://<ngrok-id>.ngrok.io/voice` (HTTP POST). No other webhooks are needed.
 
 ### Production deployment
 
@@ -147,19 +106,16 @@ docker run -d -p 127.0.0.1:8000:8000 --env-file .env crashline
 **Use exactly one gunicorn worker.** Call state lives in an in-memory dict
 keyed by `CallSid` (`ivr/state.py`), so a second worker would receive a
 caller's later webhooks in a process that has never seen their session and
-restart the decision tree mid-call. Concurrency comes from threads, which
-are safe because the store is lock-guarded:
+restart the call mid-flow. Concurrency comes from threads, which are safe
+because the store is lock-guarded:
 
 ```bash
 gunicorn --workers 1 --threads 4 -b 0.0.0.0:8000 app:app
 ```
 
-Running multiple workers or instances would first need a shared session
-store (e.g. Redis) in place of `ivr/state.py`.
-
 Set `TWILIO_AUTH_TOKEN` (from the Twilio Console) so incoming webhook
 requests are verified — `VALIDATE_TWILIO_SIGNATURE` defaults to `true`, and
-the app now refuses requests if validation is on but the token is missing,
+the app refuses requests if validation is on but the token is missing,
 rather than silently serving them unverified.
 
 **Behind a proxy, the app relies on `ProxyFix`** (already wired up in
@@ -171,13 +127,13 @@ webhooks return 403.
 `GET /healthz` returns `{"status": "ok", "commit": "<GIT_SHA>"}` for
 health checks and for confirming which build is live.
 
-## Extending the tree
+## Editing the advice or the transfer number
 
-Add or edit questions in `ivr/steps.py` — each `Step` has a spoken prompt,
-an input type (`"dtmf"` or `"speech"`), a DTMF digit map (if applicable),
-and a `next_id` function that can branch on any answer collected so far.
-Update `ivr/report.py` if a new answer should show up in the emailed
-report or the closing guidance.
+Advice text lives in `ivr/advice.py` (`NC_ADVICE`, `GENERAL_ADVICE`).
+`TRANSFER_NUMBER` there is the live-transfer destination
+((919) 899-4078, the Law Office of Johnson & Groninger, PLLC). The two
+prompts themselves — the North Carolina question and the transfer offer —
+live in `ivr/steps.py`.
 
 This is not legal, medical, or financial advice. Laws vary by state;
-always consult qualified professionals.
+always consult a qualified attorney.
