@@ -1,7 +1,7 @@
 """In-memory session store for in-progress calls, keyed by Twilio CallSid.
 
 A single process is assumed (see README for scaling notes). Sessions are
-dropped once a report has been sent or the call ends.
+dropped once the call ends.
 """
 import threading
 import time
@@ -26,10 +26,9 @@ class CallSession:
     started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     # Monotonic, so expiry is unaffected by wall-clock or NTP adjustments.
     started_monotonic: float = field(default_factory=time.monotonic)
-    current_step: str = "phase"
+    current_step: str = "nc_check"
     answers: Dict[str, Any] = field(default_factory=dict)
     retries: Dict[str, int] = field(default_factory=dict)
-    reported: bool = False
 
 
 _lock = threading.Lock()
