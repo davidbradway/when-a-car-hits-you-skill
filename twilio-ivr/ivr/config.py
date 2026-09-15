@@ -15,6 +15,19 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 
+# Seconds. The report is emailed from inside the Twilio webhook request, and
+# Twilio abandons a webhook after roughly 15 seconds — so this must stay
+# comfortably below that or the caller never hears the closing guidance.
+SMTP_TIMEOUT = float(os.environ.get("SMTP_TIMEOUT", "10"))
+
+# The crash report contains the caller's phone number, crash location and
+# injury descriptions. When SMTP is unconfigured the report is only written to
+# the log if this is explicitly enabled — useful locally, never in production.
+LOG_REPORT_BODY = os.environ.get("LOG_REPORT_BODY", "false").lower() == "true"
+
+# Set at image build time (see Dockerfile) and reported by /healthz.
+GIT_SHA = os.environ.get("GIT_SHA", "unknown")
+
 # A Twilio Polly voice. See https://www.twilio.com/docs/voice/twiml/say/text-speech#polly-voices
 VOICE = os.environ.get("TWILIO_VOICE", "Polly.Matthew")
 

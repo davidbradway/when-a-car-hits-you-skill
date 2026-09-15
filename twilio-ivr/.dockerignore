@@ -1,0 +1,21 @@
+# Keeps a developer's local .env out of a published image.
+# Verify: docker run --rm <image> ls -a /app/.env
+.env
+.env.*
+
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Tests run in CI against the source tree, not from inside the image.
+tests/
+.git/
+.gitignore
+README.md
+Dockerfile
+.dockerignore
