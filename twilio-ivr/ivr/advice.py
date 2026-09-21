@@ -2,6 +2,12 @@
 do after a car hits you while biking, walking, or running.
 """
 
+PREAMBLE = (
+    "This skill is not legal, medical, or financial advice. "
+    "Laws vary by state and jurisdiction. "
+    "Always consult qualified professionals for guidance specific to your situation. "
+)
+
 NC_ADVICE = (
     "North Carolina is special. It is one of only four states with pure contributory negligence, "
     "which means that if you are found even one percent at fault, you may not be able to recover "
@@ -17,7 +23,8 @@ NC_ADVICE = (
 )
 
 GENERAL_ADVICE = (
-    "Here is some general guidance for after a crash. There are very few rules that apply "
+    "Here is some general guidance for after a crash. "
+    "There are very few rules that apply "
     "everywhere, and advice you find online may not match the law where you are, so it's important "
     "to speak with an experienced bicycle lawyer licensed in your state. "
     "Report the crash, wait for police, and insist on a crash report. "
@@ -40,11 +47,11 @@ GENERAL_ADVICE = (
 
 GOODBYE = "Take care of yourself. Goodbye."
 
-TRANSFER_NUMBER = "+19198994078"
+TRANSFER_NUMBER = "+19192834372"
 TRANSFER_SAY = "Connecting you now to the Law Office of Johnson and Groninger, P L L C."
 
 
 def advice_for(in_nc: bool) -> str:
     if in_nc:
-        return NC_ADVICE + " " + GENERAL_ADVICE
-    return GENERAL_ADVICE
+        return PREAMBLE + " " + NC_ADVICE + " " + GENERAL_ADVICE
+    return PREAMBLE + " " + GENERAL_ADVICE
