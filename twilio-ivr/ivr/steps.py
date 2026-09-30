@@ -1,9 +1,11 @@
-"""The two questions asked by the crash line.
+"""The DTMF menus used by the crash line.
 
 1. "nc_check" — was the crash in North Carolina? Answering this decides
-   which advice gets read (ivr/advice.py) and whether the caller is later
-   offered a transfer.
-2. "transfer" — only reached when the caller said North Carolina — offers a
+   which advice sections get read (ivr/advice.py) and whether the caller is
+   later offered a transfer.
+2. "section" — asked after each advice section: repeat it or continue.
+   One step serves every section; the session tracks which one is current.
+3. "transfer" — only reached when the caller said North Carolina — offers a
    live transfer to the Law Office of Johnson & Groninger, PLLC.
 """
 from dataclasses import dataclass
@@ -40,6 +42,15 @@ _register(Step(
     field="in_nc",
     digit_map={"1": "yes", "2": "no"},
     skip_default="no",
+))
+
+_register(Step(
+    id="section",
+    prompt=lambda s: "Press 1 to hear that again. Press 2 to continue.",
+    field="section_choice",
+    digit_map={"1": "repeat", "2": "continue"},
+    # Silence moves the call along rather than stalling on one section.
+    skip_default="continue",
 ))
 
 _register(Step(

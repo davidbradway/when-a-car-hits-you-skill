@@ -9,11 +9,14 @@ transfer offered to North Carolina callers.
 
 1. **North Carolina check** (DTMF) — "Press 1 if the crash happened in
    North Carolina. Press 2 if it happened somewhere else."
-2. **Advice**, spoken aloud:
-   - North Carolina callers hear the North Carolina–specific guidance
-     (pure contributory negligence, and the insurance/med-pay rules that
-     follow from it) plus the general guidance.
-   - Everyone else hears the general guidance only.
+2. **Advice**, spoken one short section at a time ("Part 2 of 5. …").
+   After each section: "Press 1 to hear that again. Press 2 to continue."
+   If the caller presses nothing, the call moves on to the next section.
+   - North Carolina callers hear five sections: two North Carolina–specific
+     ones (pure contributory negligence, then the insurance/med-pay rules
+     that follow from it) and the three general ones.
+   - Everyone else hears the three general sections only (at the scene;
+     your health and your evidence; protecting your claim).
 3. **Transfer offer** (North Carolina callers only) — "Press 1 to be
    connected now to the Law Office of Johnson & Groninger, PLLC. Otherwise,
    stay on the line and this call will end." Pressing 1 dials
@@ -26,12 +29,13 @@ read aloud and, optionally, a transfer.
 
 ```
 twilio-ivr/
-  app.py            Flask routes: /voice, /gather/nc_check, /gather/transfer
+  app.py            Flask routes: /voice, /gather/nc_check, /gather/section,
+                    /gather/transfer
   ivr/
     config.py       Env-var configuration
     state.py        In-memory per-call session store (keyed by CallSid)
-    steps.py        The two DTMF questions: prompts and digit maps
-    advice.py        Spoken guidance text (North Carolina and general)
+    steps.py        The DTMF menus: NC question, repeat/continue, transfer
+    advice.py       Spoken guidance, split into sections (NC and general)
   tests/
     test_engine.py  End-to-end tests against the Flask app (no real Twilio)
 ```
@@ -66,6 +70,8 @@ same `CallSid` across requests — it is the session key.
 ```bash
 curl -X POST localhost:5000/voice -d 'CallSid=dev1&From=%2B15551234567'
 curl -X POST localhost:5000/gather/nc_check -d 'CallSid=dev1&Digits=1'
+curl -X POST localhost:5000/gather/section -d 'CallSid=dev1&Digits=1'   # repeat
+curl -X POST localhost:5000/gather/section -d 'CallSid=dev1&Digits=2'   # continue (x5)
 curl -X POST localhost:5000/gather/transfer -d 'CallSid=dev1&Digits=2'
 ```
 
@@ -129,11 +135,13 @@ health checks and for confirming which build is live.
 
 ## Editing the advice or the transfer number
 
-Advice text lives in `ivr/advice.py` (`NC_ADVICE`, `GENERAL_ADVICE`).
+Advice text lives in `ivr/advice.py` as lists of `Section`s
+(`NC_SECTIONS`, `GENERAL_SECTIONS`); add, split, or reorder sections there
+and the "Part N of M" numbering follows.
 `TRANSFER_NUMBER` there is the live-transfer destination
-((919) 899-4078, the Law Office of Johnson & Groninger, PLLC). The two
-prompts themselves — the North Carolina question and the transfer offer —
-live in `ivr/steps.py`.
+((919) 899-4078, the Law Office of Johnson & Groninger, PLLC). The menus
+themselves — the North Carolina question, the repeat/continue prompt, and
+the transfer offer — live in `ivr/steps.py`.
 
 This is not legal, medical, or financial advice. Laws vary by state;
 always consult a qualified attorney.

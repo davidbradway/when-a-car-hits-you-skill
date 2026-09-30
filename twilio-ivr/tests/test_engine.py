@@ -43,29 +43,99 @@ def test_voice_starts_with_nc_question(client):
     assert b"Press 1 if the crash happened in North Carolina" in resp.data
 
 
-def test_nc_caller_hears_nc_advice_and_transfer_offer(client):
+def continue_to_end(client, call_sid="CA123"):
+    """Press 2 until the advice sections run out; returns the final response."""
+    for _ in range(20):
+        resp = answer(client, "section", call_sid=call_sid, digits="2")
+        if b"Press 1 to hear that again" not in resp.data:
+            return resp
+    raise AssertionError("advice sections never ended")
+
+
+def test_nc_caller_hears_first_nc_section_with_repeat_menu(client):
     start_call(client)
     resp = answer(client, "nc_check", digits="1")
     body = resp.data.decode()
+    assert "not legal, medical, or financial advice" in body
+    assert "Part 1 of 5" in body
     assert "pure contributory negligence" in body
-    assert "Report the crash, wait for police" in body  # general advice too
-    assert "Press 1 to be connected now to the Law Office of Johnson and Groninger" in body
+    # Only one section at a time.
+    assert "Report the crash, wait for police" not in body
+    assert "Press 1 to hear that again. Press 2 to continue." in body
+    assert 'action="/gather/section"' in body
 
 
-def test_non_nc_caller_hears_general_advice_only_and_call_ends(client):
+def test_continue_advances_through_every_nc_section_then_offers_transfer(client):
+    start_call(client)
+    answer(client, "nc_check", digits="1")
+    heard = []
+    for _ in range(4):
+        heard.append(answer(client, "section", digits="2").data.decode())
+    assert "Part 2 of 5" in heard[0] and "med pay" in heard[0]
+    assert "Part 3 of 5" in heard[1] and "Report the crash, wait for police" in heard[1]
+    assert "Part 4 of 5" in heard[2]
+    assert "Part 5 of 5" in heard[3] and "track your losses" in heard[3]
+    resp = answer(client, "section", digits="2")
+    assert b"Press 1 to be connected now to the Law Office of Johnson and Groninger" in resp.data
+
+
+def test_repeat_rereads_the_same_section(client):
+    start_call(client)
+    answer(client, "nc_check", digits="1")
+    answer(client, "section", digits="2")  # on to part 2
+    resp = answer(client, "section", digits="1")
+    body = resp.data.decode()
+    assert "Part 2 of 5" in body
+    assert "med pay" in body
+    # The disclaimer is read once, at the start, not on every repeat.
+    assert "not legal, medical, or financial advice" not in body
+    resp = answer(client, "section", digits="2")
+    assert b"Part 3 of 5" in resp.data
+
+
+def test_non_nc_caller_hears_general_sections_only_and_call_ends(client):
     start_call(client)
     resp = answer(client, "nc_check", digits="2")
     body = resp.data.decode()
     assert "pure contributory negligence" not in body
+    assert "Part 1 of 3" in body
     assert "Report the crash, wait for police" in body
+    resp = continue_to_end(client)
+    body = resp.data.decode()
     assert "Johnson and Groninger" not in body
     assert "Take care of yourself. Goodbye." in body
     assert "<Hangup" in body
 
 
+def test_section_bad_input_reasks_menu_then_continues(client):
+    start_call(client)
+    answer(client, "nc_check", digits="2")
+    resp = answer(client, "section", digits="9")
+    body = resp.data.decode()
+    assert "Sorry, I didn" in body
+    assert "Press 1 to hear that again" in body
+    # Re-asks just the menu, not the whole section.
+    assert "Report the crash" not in body
+    answer(client, "section")  # silence
+    resp = answer(client, "section")  # retries exhausted: default is continue
+    assert b"Part 2 of 3" in resp.data
+
+
+def test_section_retry_budget_resets_after_a_valid_press(client):
+    start_call(client)
+    answer(client, "nc_check", digits="2")
+    answer(client, "section", digits="9")
+    answer(client, "section", digits="9")
+    answer(client, "section", digits="2")  # valid: on to part 2
+    resp = answer(client, "section", digits="9")
+    # A fresh section gets a fresh retry budget rather than auto-continuing.
+    assert b"Sorry, I didn" in resp.data
+
+
 def test_transfer_accepted_dials_the_law_office(client):
     start_call(client)
     answer(client, "nc_check", digits="1")
+    continue_to_end(client)
     resp = answer(client, "transfer", digits="1")
     body = resp.data.decode()
     assert "+19192834372" in body
@@ -75,6 +145,7 @@ def test_transfer_accepted_dials_the_law_office(client):
 def test_transfer_declined_ends_the_call(client):
     start_call(client)
     answer(client, "nc_check", digits="1")
+    continue_to_end(client)
     resp = answer(client, "transfer", digits="2")
     body = resp.data.decode()
     assert "Take care of yourself. Goodbye." in body
@@ -93,7 +164,7 @@ def test_invalid_dtmf_retries_then_falls_back_to_default(client):
     # Retries exhausted: falls back to the default ("no") and moves on.
     body = resp.data.decode()
     assert "pure contributory negligence" not in body
-    assert "Take care of yourself. Goodbye." in body
+    assert "Part 1 of 3" in body
 
 
 # ---------------------------------------------------------------------------

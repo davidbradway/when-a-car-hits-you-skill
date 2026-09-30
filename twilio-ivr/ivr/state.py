@@ -27,6 +27,8 @@ class CallSession:
     # Monotonic, so expiry is unaffected by wall-clock or NTP adjustments.
     started_monotonic: float = field(default_factory=time.monotonic)
     current_step: str = "nc_check"
+    # Which advice section (ivr/advice.py sections_for) the caller is on.
+    section_index: int = 0
     answers: Dict[str, Any] = field(default_factory=dict)
     retries: Dict[str, int] = field(default_factory=dict)
 

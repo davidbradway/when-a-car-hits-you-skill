@@ -4,8 +4,9 @@ Point a Twilio phone number's "A call comes in" webhook at POST /voice.
 See README.md for setup.
 
 The call asks one question — was the crash in North Carolina? — reads the
-matching advice, and, for North Carolina callers, offers a live transfer to
-the Law Office of Johnson & Groninger, PLLC.
+matching advice one section at a time (the caller can repeat each section or
+continue), and, for North Carolina callers, offers a live transfer to the Law
+Office of Johnson & Groninger, PLLC.
 """
 import logging
 from functools import wraps
@@ -17,7 +18,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ivr import config
-from ivr.advice import GOODBYE, TRANSFER_NUMBER, TRANSFER_SAY, advice_for
+from ivr.advice import GOODBYE, PREAMBLE, TRANSFER_NUMBER, TRANSFER_SAY, section_say, sections_for
 from ivr.state import CallSession, drop, get, get_or_create
 from ivr.steps import STEPS, Step
 
@@ -97,6 +98,9 @@ def _resolve_digit(step: Step, session: CallSession) -> Optional[str]:
 
     if parsed is not None:
         session.answers[step.field] = parsed
+        # The "section" step is answered once per section, so a valid press
+        # restores its retry budget for the next one.
+        session.retries.pop(step.id, None)
         return parsed
 
     retries = session.retries.get(step.id, 0)
@@ -155,14 +159,49 @@ def gather_nc_check():
         vr = render_step(step, session, prefix=step.retry_prompt + " ")
         return str(vr), 200, {"Content-Type": "text/xml"}
 
-    in_nc = answer == "yes"
-    advice_text = advice_for(in_nc)
+    session.section_index = 0
+    vr = _render_section(session, preamble=PREAMBLE)
+    return str(vr), 200, {"Content-Type": "text/xml"}
 
-    if in_nc:
-        vr = render_step(STEPS["transfer"], session, prefix=advice_text + " ")
+
+def _render_section(session: CallSession, preamble: str = "") -> VoiceResponse:
+    """Read the current advice section, then ask to repeat or continue."""
+    sections = sections_for(session.answers.get("in_nc") == "yes")
+    text = section_say(sections, session.section_index)
+    return render_step(STEPS["section"], session, prefix=preamble + text + " ")
+
+
+@app.post("/gather/section")
+@validate_twilio_request
+def gather_section():
+    call_sid = request.form.get("CallSid", "")
+    session = get(call_sid)
+    step = STEPS["section"]
+    if session is None:
+        # Session expired or unknown — restart the call cleanly.
+        session = get_or_create(call_sid, request.form.get("From", ""))
+        vr = render_step(STEPS["nc_check"], session)
+        return str(vr), 200, {"Content-Type": "text/xml"}
+
+    answer = _resolve_digit(step, session)
+    if answer is None:
+        # Re-ask only the menu, not the whole section; pressing 1 repeats it.
+        vr = render_step(step, session, prefix=step.retry_prompt + " ")
+        return str(vr), 200, {"Content-Type": "text/xml"}
+
+    if answer == "repeat":
+        vr = _render_section(session)
+        return str(vr), 200, {"Content-Type": "text/xml"}
+
+    in_nc = session.answers.get("in_nc") == "yes"
+    session.section_index += 1
+    if session.section_index < len(sections_for(in_nc)):
+        vr = _render_section(session)
+    elif in_nc:
+        vr = render_step(STEPS["transfer"], session)
     else:
         vr = VoiceResponse()
-        vr.say(advice_text + " " + GOODBYE, voice=config.VOICE)
+        vr.say(GOODBYE, voice=config.VOICE)
         vr.hangup()
         drop(call_sid)
     return str(vr), 200, {"Content-Type": "text/xml"}
